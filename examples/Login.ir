@@ -1,0 +1,29 @@
+screen Login {
+  Stack #root (dir: v, w: fill, h: fill, pad: $space.lg, gap: $space.md,
+               mainAlign: center, crossAlign: stretch, bg: $color.bg.canvas)
+               @expanded(pad: $space.xl, maxW: 480) {
+
+    Text #title (style: $type.heading.lg, color: $color.text.primary, role: heading(1))
+      "Bienvenue"
+
+    Text #subtitle (style: $type.body.md, color: $color.text.secondary, maxLines: 2)
+      slot(subtitle)
+
+    Stack #form (dir: v, gap: $space.sm) {
+      Box #email (h: fixed(48), bg: $color.bg.field, radius: $radius.md,
+                  border: ($size.hairline, $color.border.default),
+                  role: textfield, label: "Email")
+      Box #password (h: fixed(48), bg: $color.bg.field, radius: $radius.md,
+                     border: ($size.hairline, $color.border.default),
+                     role: textfield, label: "Mot de passe")
+    }
+
+    Stack #actions (dir: h, gap: $space.sm, crossAlign: center) {
+      Stack #primary (dir: h, w: fill, h: fixed(48), mainAlign: center, crossAlign: center,
+                      bg: $color.accent, radius: $radius.md, role: button) {
+        Text #primaryLabel (style: $type.label.md, color: $color.text.onAccent) "Continuer"
+      }
+      Icon #help (name: $icon.help, size: $size.icon.md, color: $color.text.secondary)
+    }
+  }
+}

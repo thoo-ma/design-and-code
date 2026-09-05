@@ -1,0 +1,56 @@
+/* Généré depuis tokens.json + tokens.dark.json. Golden test du compilateur de tokens, cible CSS. */
+/* Nommage : $groupe.sous.nom  ->  --groupe-sous-nom. Les primitives (palette, font) ne sont pas émises. */
+
+:root {
+  --space-none: 0px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  --size-hairline: 1px;
+  --size-icon-sm: 16px;
+  --size-icon-md: 24px;
+  --size-icon-lg: 32px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  --opacity-disabled: 0.4;
+  --opacity-muted: 0.7;
+
+  --color-bg-canvas: #FFFFFF;
+  --color-bg-field: #F7F7F5;
+  --color-text-primary: #1C1C1A;
+  --color-text-secondary: #7A7975;
+  --color-text-onAccent: #FFFFFF;
+  --color-accent: #2F6FDE;
+  --color-border-default: #C9C7C0;
+
+  --shadow-sm: 0px 1px 2px 0px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0px 4px 12px 0px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="dark"] {
+  --color-bg-canvas: #1C1C1A;
+  --color-bg-field: #44443F;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #C9C7C0;
+  --color-text-onAccent: #FFFFFF;
+  --color-accent: #2F6FDE;
+  --color-border-default: #44443F;
+
+  --shadow-sm: 0px 1px 2px 0px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0px 4px 12px 0px rgba(0, 0, 0, 0.5);
+}
+
+/* Tokens composites de typographie : une classe par token. Text.style: $type.heading.lg -> .type-heading-lg */
+
+.type-heading-lg { font-family: Inter, system-ui, sans-serif; font-size: 28px; line-height: 1.214; font-weight: 600; letter-spacing: -0.4px; }
+.type-heading-md { font-family: Inter, system-ui, sans-serif; font-size: 22px; line-height: 1.273; font-weight: 600; letter-spacing: -0.2px; }
+.type-body-md    { font-family: Inter, system-ui, sans-serif; font-size: 16px; line-height: 1.5;   font-weight: 400; letter-spacing: 0px; }
+.type-body-sm    { font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.429; font-weight: 400; letter-spacing: 0px; }
+.type-label-md   { font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.333; font-weight: 500; letter-spacing: 0.1px; }

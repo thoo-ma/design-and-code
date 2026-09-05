@@ -1,0 +1,26 @@
+{
+  "$description": "Mode sombre. Overlay : seules les feuilles sémantiques qui changent sont listées. Fusionné sur tokens.json par le compilateur de tokens. L'IR ne voit jamais ce fichier.",
+
+  "color": {
+    "$type": "color",
+    "bg": {
+      "canvas": { "$value": "{color.palette.gray.900}" },
+      "field":  { "$value": "{color.palette.gray.700}" }
+    },
+    "text": {
+      "primary":   { "$value": "{color.palette.gray.0}" },
+      "secondary": { "$value": "{color.palette.gray.300}" },
+      "onAccent":  { "$value": "{color.palette.gray.0}" }
+    },
+    "accent": { "$value": "{color.palette.blue.500}" },
+    "border": {
+      "default": { "$value": "{color.palette.gray.700}" }
+    }
+  },
+
+  "shadow": {
+    "$type": "shadow",
+    "sm": { "$value": { "color": { "colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.4, "hex": "#000000" }, "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 1, "unit": "px" }, "blur": { "value": 2,  "unit": "px" }, "spread": { "value": 0, "unit": "px" } } },
+    "md": { "$value": { "color": { "colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.5, "hex": "#000000" }, "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 4, "unit": "px" }, "blur": { "value": 12, "unit": "px" }, "spread": { "value": 0, "unit": "px" } } }
+  }
+}

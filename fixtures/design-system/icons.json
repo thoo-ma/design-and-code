@@ -1,0 +1,19 @@
+{
+  "$description": "Jeu d'icônes. Extension hors DTCG (pas de type icon dans la spec). Chaque entrée donne le nom par backend. Une icône absente d'un backend est E002 pour ce backend.",
+  "icons": {
+    "help":          { "web": "help-circle",   "ios": "questionmark.circle", "android": "help_outline" },
+    "check":         { "web": "check",         "ios": "checkmark",           "android": "check" },
+    "close":         { "web": "x",             "ios": "xmark",               "android": "close" },
+    "chevron-right": { "web": "chevron-right", "ios": "chevron.right",       "android": "chevron_right" },
+    "search":        { "web": "search",        "ios": "magnifyingglass",     "android": "search" }
+  },
+  "web": {
+    "$description": "Nom dans le sprite SVG du projet. Le compilateur émet <Icon name=\"...\" />, le sprite est fourni par la zone préservée."
+  },
+  "ios": {
+    "$description": "Nom SF Symbol."
+  },
+  "android": {
+    "$description": "Nom Material Symbols (backend Compose, hors scope v0, table remplie par anticipation)."
+  }
+}

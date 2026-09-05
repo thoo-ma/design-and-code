@@ -1,0 +1,663 @@
+# Spec de l'IR — v0.1 (couche layout)
+
+Statut : brouillon fondateur. Découle de ADR-001 (l'IR est la source de vérité), ADR-002 (adjonction et lois, fragment design-relevant) et ADR-003 (layout d'abord, backends CSS et SwiftUI).
+
+Ce document est la constitution du projet. Un agent qui doit trancher lit ce document avant d'inventer. Une fonctionnalité absente d'ici n'existe pas encore, même si un backend pourrait la produire.
+
+---
+
+## 0. Portée de la v0.1
+
+Couvert :
+- Le modèle de boîtes (Stack, Box, Text, Image, Icon).
+- Le dimensionnement (fixe, hug, fill), les contraintes min/max, l'alignement, le débordement.
+- Les tokens, par référence à la spec DTCG, sans redéfinition.
+- Deux breakpoints (compact, expanded) par surcharge de propriétés.
+- La frontière design/code dans la syntaxe (placeholders et slots).
+- La forme normale, les lois, la stratégie de test.
+- Les tables de correspondance IR ↔ CSS, IR ↔ SwiftUI, IR ← Figma.
+
+Réservé (syntaxe stabilisée, sémantique à venir) :
+- Les composants nommés et leurs signatures (props, slots, variants, états).
+- Les états visuels sur les feuilles.
+
+Hors scope v0 (ADR-003) :
+- Layout absolu, rotation, wrap, grid, poids sur fill, animation de layout.
+- Modes de thème dans l'IR : le clair/sombre est une affaire de tokens (modes DTCG), l'IR ne le voit jamais.
+
+---
+
+## 1. Principes
+
+1. **Tient dans une tête.** Cinq types de nœuds, une quinzaine de propriétés. Toute proposition d'ajout doit d'abord montrer qu'elle ne peut pas s'exprimer avec l'existant.
+2. **Textuel et versionnable.** Un écran est un fichier `.ir` lisible dans un diff. La sérialisation JSON de l'arbre (AST) en est dérivée mécaniquement ; elle n'est jamais éditée à la main.
+3. **Typé.** Chaque propriété a un type. Un fichier `.ir` qui ne type pas ne compile pas.
+4. **Aucun `if`.** L'IR décrit ce qui est visible à état fixé. Toute condition est côté code (ADR-002).
+5. **Tokens obligatoires pour le style et l'espacement.** Une couleur, une typo, un gap ou un padding littéral est une erreur de compilation. Les dimensions fixes et les contraintes min/max acceptent un littéral, parce qu'une largeur de 480 est une décision de layout, pas de style.
+6. **Échec explicite.** Un import qui ne rentre pas dans l'IR échoue avec l'emplacement exact et la raison. Jamais d'approximation silencieuse.
+7. **Identité stable.** Chaque nœud porte un identifiant stable qui survit aux aller-retours. C'est ce qui rend les lois testables sur des arbres réels et pas seulement structurellement.
+
+---
+
+## 2. Concepts
+
+**Document.** Un fichier `.ir` décrit exactement un écran (`screen`). Il référence un design system par ses tokens ; il ne les définit pas.
+
+**Nœud.** Un élément de l'arbre. Cinq types :
+- `Stack` : conteneur à un axe, seul nœud avec des enfants.
+- `Box` : rectangle feuille avec style, sans enfants. Sert de placeholder de composant et de surface.
+- `Text` : texte feuille.
+- `Image` : image feuille.
+- `Icon` : icône feuille, issue du jeu d'icônes du design system.
+
+**Axe.** Un `Stack` a un axe principal (`dir: v` ou `h`) et un axe secondaire. Toutes les règles de dimensionnement sont exprimées par axe.
+
+**Token.** Une référence `$groupe.nom` vers une valeur du design system. Typé par son groupe : `$space.*` (longueur), `$size.*` (longueur), `$color.*`, `$type.*` (typographie composite), `$radius.*`, `$shadow.*`, `$opacity.*`, `$icon.*`.
+
+**Unité.** Une longueur littérale est un nombre en unité `u`, avec la convention : 1 u = 1 px CSS = 1 pt SwiftUI = 1 dp Compose. Les trois sont indépendants de la densité, l'égalité est exacte en pratique.
+
+**Breakpoint.** Une classe de largeur de viewport, nommée, définie par le design system. En v0, exactement deux : `compact` et `expanded`. Un nœud peut surcharger certaines propriétés par breakpoint.
+
+**Placeholder et slot.** Le contenu d'une feuille est soit un littéral (contenu d'exemple fourni par le design, compilé vers les previews, jamais vers la production), soit un `slot(nom)` (valeur fournie par le code). C'est l'endroit précis où la frontière de l'ADR-002 apparaît dans la syntaxe.
+
+---
+
+## 3. Syntaxe concrète
+
+### 3.1 Grammaire
+
+```
+document   := "screen" IDENT block
+block      := "{" node* "}"
+node       := TYPE id? "(" props? ")" content? override* block?
+id         := "#" IDENT
+props      := prop ("," prop)*
+prop       := KEY ":" value
+value      := token | number | string | enum | tuple | call
+token      := "$" IDENT ("." IDENT)+
+tuple      := "(" value ("," value)* ")"
+call       := IDENT "(" value ("," value)* ")"
+content    := STRING | "slot" "(" IDENT ")"
+override   := "@" IDENT "(" props ")"
+```
+
+Contraintes hors grammaire :
+- `block` n'est autorisé que sur `Stack`.
+- `content` n'est autorisé que sur `Text` et `Image`.
+- Les `override` référencent un breakpoint connu du design system.
+- Les `id` sont uniques dans le document.
+
+### 3.2 Exemple minimal
+
+```
+screen Hello {
+  Stack #root (dir: v, w: fill, h: fill, pad: $space.lg, gap: $space.md, crossAlign: stretch) {
+    Text #title (style: $type.heading.lg, color: $color.text.primary, role: heading(1)) "Bonjour"
+    Text #body (style: $type.body.md, color: $color.text.secondary) slot(message)
+  }
+}
+```
+
+### 3.3 Sérialisation
+
+L'AST est un JSON dont la forme est la transcription directe de la grammaire. Il est produit par `parse` et consommé par tous les outils. `print(parse(x))` est défini en §7 (loi 0). Personne n'écrit le JSON à la main.
+
+---
+
+## 4. Le modèle de boîtes
+
+### 4.1 Propriétés communes à tous les nœuds
+
+| Propriété | Type | Défaut | Note |
+|---|---|---|---|
+| `w`, `h` | `fixed(n)` \| `hug` \| `fill` | `hug` | Mode de dimension par axe absolu (largeur, hauteur). |
+| `minW`, `maxW`, `minH`, `maxH` | longueur (littéral ou `$size.*`) | aucun | Contraintes appliquées après résolution du mode. |
+| `role` | `none` \| `heading(n)` \| `button` \| `textfield` \| `list` \| `listitem` \| `image` \| `decorative` | `none` | Sémantique, compilée vers la balise ou le trait d'accessibilité. |
+| `label` | string | aucun | Libellé accessible quand le contenu visuel ne suffit pas. |
+
+Les modes de dimension s'interprètent par rapport au parent :
+- `fixed(n)` : la dimension vaut n, indépendamment du parent et des enfants.
+- `hug` : la dimension est la taille intrinsèque du contenu (enfants, texte, image).
+- `fill` : la dimension occupe l'espace disponible attribué par le parent. Sans poids en v0 : plusieurs `fill` sur un même axe se partagent l'espace à parts égales.
+
+### 4.2 Stack
+
+| Propriété | Type | Défaut |
+|---|---|---|
+| `dir` | `v` \| `h` | requis |
+| `gap` | `$space.*` | `$space.none` |
+| `pad` | `$space.*` \| `($v, $h)` \| `($t, $r, $b, $l)` | `$space.none` |
+| `mainAlign` | `start` \| `center` \| `end` \| `between` | `start` |
+| `crossAlign` | `start` \| `center` \| `end` \| `stretch` | `start` |
+| `overflow` | `visible` \| `clip` \| `scroll` | `visible` |
+| `bg` | `$color.*` | aucun |
+| `radius` | `$radius.*` | aucun |
+| `border` | `($size.*, $color.*)` | aucun |
+| `shadow` | `$shadow.*` | aucun |
+| `opacity` | `$opacity.*` | aucun |
+
+`mainAlign` n'a d'effet que si le Stack dispose d'espace libre sur son axe principal (c'est-à-dire s'il n'est pas `hug` sur cet axe, ou s'il est `hug` mais contraint par un `minW`/`minH` supérieur à son contenu). `between` avec un seul enfant se comporte comme `start`.
+
+`crossAlign: stretch` force les enfants dont le mode secondaire est `hug` à occuper l'axe secondaire du Stack. Un enfant `fixed` sur l'axe secondaire n'est jamais étiré.
+
+`overflow: scroll` rend le Stack défilant sur son axe principal uniquement.
+
+### 4.3 Box
+
+Toutes les propriétés de style de Stack (`bg`, `radius`, `border`, `shadow`, `opacity`), sans `dir`, `gap`, `pad`, alignements ni enfants. Une `Box` en mode `hug` sur un axe a une taille intrinsèque de 0 sur cet axe : une `Box` utile est `fixed` ou `fill`.
+
+### 4.4 Text
+
+| Propriété | Type | Défaut |
+|---|---|---|
+| `style` | `$type.*` | requis |
+| `color` | `$color.*` | requis |
+| `align` | `start` \| `center` \| `end` | `start` |
+| `maxLines` | entier ≥ 1 | aucun (illimité) |
+| `truncate` | `none` \| `end` | `end` si `maxLines`, sinon `none` |
+
+Contenu : littéral (placeholder) ou `slot(nom)`. Taille intrinsèque : celle du texte mesuré dans le style, avec retour à la ligne si la largeur est contrainte. La mesure du texte est fournie par la plateforme (§5.3).
+
+### 4.5 Image
+
+| Propriété | Type | Défaut |
+|---|---|---|
+| `fit` | `cover` \| `contain` | `cover` |
+| `ratio` | `(w, h)` entiers | aucun |
+| `radius` | `$radius.*` | aucun |
+
+Contenu : littéral (URL ou nom d'asset de placeholder) ou `slot(nom)`. Taille intrinsèque : celle de l'asset si connue, sinon dérivée de `ratio` et de l'autre axe, sinon 0. Une `Image` sans `fixed`, sans `fill` et sans `ratio` sur au moins un axe est une erreur (E006).
+
+### 4.6 Icon
+
+| Propriété | Type | Défaut |
+|---|---|---|
+| `name` | `$icon.*` | requis |
+| `size` | `$size.*` | requis |
+| `color` | `$color.*` | requis |
+
+`w` et `h` sont implicitement `fixed(size)` et ne peuvent pas être surchargés.
+
+### 4.7 Breakpoints et surcharges
+
+Un `override` `@expanded(...)` remplace, pour ce breakpoint, les propriétés listées. Seules les propriétés de layout et de style sont surchargeables ; `role`, `label`, le contenu et les enfants ne le sont pas. Un écran est donc un seul arbre, jamais deux arbres par breakpoint : la structure est invariante, seules les propriétés varient. C'est une restriction délibérée de la v0, qui garantit que les lois portent sur un objet unique.
+
+Le breakpoint de base (sans `@`) est `compact`. Un nœud sans surcharge a les mêmes propriétés partout.
+
+---
+
+## 5. Sémantique de référence du layout
+
+La sémantique est donnée par un algorithme de référence, implémenté une fois, en TypeScript, dans le package `ir-layout-ref`. Il ne rend rien à l'écran ; il calcule la géométrie (position et taille de chaque nœud) pour un viewport donné. Les backends sont jugés contre lui (loi 3).
+
+### 5.1 Modèle
+
+Contraintes descendantes, tailles remontantes. Chaque nœud reçoit de son parent une contrainte `(maxW, maxH)` où chaque composante est un nombre ou `∞`, et retourne une taille `(w, h)`. C'est le modèle commun à Figma auto-layout, à Flutter, à Compose et, moyennant la traduction en flex, à CSS. C'est cette communauté qui rend l'algèbre partagée possible.
+
+### 5.2 Algorithme
+
+```
+measure(node, maxW, maxH) -> (w, h)
+
+  si node est Icon :
+     retourner (size, size)
+
+  si node est Text :
+     largeur disponible = selon mode w :
+        fixed(n) -> n ; fill -> maxW ; hug -> maxW (mesure en une ligne si maxW = ∞)
+     (tw, th) = platform.measureText(contenu, style, largeur disponible, maxLines)
+     w = selon mode w : fixed(n) -> n ; fill -> maxW ; hug -> tw
+     h = selon mode h : fixed(n) -> n ; fill -> maxH ; hug -> th
+     appliquer min/max ; retourner (w, h)
+
+  si node est Image ou Box :
+     intrinsèque = (asset ou ratio) pour Image, (0, 0) pour Box
+     w = selon mode w : fixed(n) -> n ; fill -> maxW ; hug -> intrinsèque.w
+     h = selon mode h : fixed(n) -> n ; fill -> maxH ; hug -> intrinsèque.h
+     si un seul axe est résolu et ratio existe : dériver l'autre
+     appliquer min/max ; retourner (w, h)
+
+  si node est Stack :
+     (main, cross) = axes selon dir
+     innerMax = max - padding sur chaque axe
+     disponibleMain = innerMax.main - gap * (nbEnfants - 1)
+
+     1. enfants fixed sur main : mesurer avec (fixed, innerMax.cross) ; somme -> S_fixed
+     2. enfants hug sur main : mesurer avec (∞ sur main, innerMax.cross) ; somme -> S_hug
+     3. reste = max(0, disponibleMain - S_fixed - S_hug)
+        enfants fill sur main : part = reste / nbFill ; mesurer avec (part, innerMax.cross)
+     4. taille main du Stack :
+        fixed(n) -> n
+        hug      -> S_fixed + S_hug + S_fill + gaps + padding
+        fill     -> max.main   (erreur E007 si max.main = ∞)
+     5. taille cross du Stack :
+        fixed(n) -> n
+        hug      -> max des tailles cross des enfants non-fill + padding
+        fill     -> max.cross  (erreur E007 si max.cross = ∞)
+     6. enfants fill sur cross, ou hug avec crossAlign: stretch :
+        re-mesurer avec cross = innerCross du Stack
+     appliquer min/max ; retourner (w, h)
+
+arrange(node, x, y) :
+  Stack : placer les enfants le long de main selon mainAlign
+     (start | center | end | between répartissent l'espace libre),
+     le long de cross selon crossAlign, puis récurser.
+  feuilles : position donnée.
+```
+
+Deux remarques d'implémentation :
+- Le passage 6 est la seule remesure ; elle est bornée (une fois) et ne fait pas de point fixe. C'est ce qui garantit la terminaison en O(n) et la prévisibilité.
+- Un `fill` sur main dans un Stack `hug` sur main est éliminé par la forme normale (§6), donc l'algorithme ne le rencontre jamais.
+
+### 5.3 Mesure de texte
+
+`platform.measureText` est un paramètre de l'algorithme, pas une partie de la spec. Le layout de référence est donc paramétré par une fonction de mesure ; les lois de géométrie (loi 3) sont énoncées à mesure fixée. C'est la formulation honnête de « pas de fidélité pixel entre plateformes » (ADR-001) : la géométrie est identique à mesure égale, et les mesures diffèrent entre plateformes.
+
+Pour les tests, une mesure déterministe de référence est fournie (police monospace fictive, largeur par caractère fixe), qui rend les tests reproductibles sans navigateur ni simulateur.
+
+---
+
+## 6. Forme normale
+
+Toute comparaison d'IR (dans les lois, dans les tests, dans les diffs) se fait sur la forme normale `N(ir)`. `N` est idempotente : `N(N(x)) = N(x)`.
+
+Règles, appliquées dans cet ordre :
+
+1. **Élimination de fill-in-hug.** Un enfant `fill` sur un axe où son parent Stack est `hug` sur le même axe devient `hug`. (Figma applique la même règle silencieusement ; ici elle est explicite et produit un avertissement W001 à l'import.)
+2. **Élimination des défauts.** Toute propriété égale à sa valeur par défaut est omise.
+3. **Élimination des surcharges vides.** Un `@bp(...)` dont chaque propriété est égale à la valeur de base est supprimé.
+4. **Résolution de `truncate`.** `truncate: end` est omis si `maxLines` est présent ; `truncate: none` sans `maxLines` est omis.
+5. **Ordre canonique des propriétés.** L'ordre est celui des tables de §4, `w`/`h` d'abord, puis contraintes, puis propriétés du type, puis style, puis `role`/`label`.
+6. **Identifiants.** Un nœud sans `#id` reçoit `#n_<hash>` où le hash est celui de son chemin (indices depuis la racine) et de son type. Déterministe, donc stable tant que la structure ne change pas.
+7. **Padding.** `pad: ($a, $a)` devient `pad: $a` ; `pad: ($a, $b, $a, $b)` devient `pad: ($a, $b)`.
+
+La forme normale est la sortie de tous les importeurs et de tous les décompilateurs. Le fichier `.ir` commité est toujours en forme normale ; un hook de pre-commit l'assure.
+
+---
+
+## 7. Lois
+
+Notation : `ir` désigne un document en forme normale. `≡` est l'égalité structurelle après `N`.
+
+**Loi 0 — Syntaxe.** `parse(print(ir)) ≡ ir` et `print(parse(s))` est un texte en forme normale pour tout `s` valide.
+
+**Loi 1 — Design.** Pour tout outil de design D disposant d'un importeur et d'un exporteur : `import_D(export_D(ir)) ≡ ir`. Tout ce que l'IR exprime survit à un passage par l'outil de design.
+
+**Loi 2 — Code.** Pour tout backend B : `decompile_B(compile_B(ir)) ≡ ir`. La décompilation ne lit que la zone générée (§9). Tout ce que l'IR exprime survit à un passage par le code.
+
+**Loi 3 — Géométrie.** Pour tout backend B, tout viewport V et une mesure de texte M fixée : `geometry_B(compile_B(ir), V, M) ≈ geometry_ref(ir, V, M)`, où `≈` est l'égalité à 1 u près sur chaque coordonnée. C'est la loi qui dit que le compilateur est correct, pas seulement réversible.
+
+**Loi 4 — Normalisation.** `N(N(ir)) ≡ N(ir)` et, pour toute opération O parmi import, export, compile, decompile : `N(O(ir)) ≡ O(N(ir))`. Les outils commutent avec la forme normale.
+
+Ce qui n'est pas une loi et ne doit pas être testé comme telle :
+- `export_D(import_D(x)) = x` pour un fichier de design `x` quelconque. Le sens design → IR → design n'est pas l'identité, par construction (le design contient des choses que l'IR jette, comme des calques absolus).
+- `compile_B(decompile_B(c)) = c` pour un code `c` quelconque. Même raison, côté code.
+
+---
+
+## 8. Stratégie de test
+
+### 8.1 Tests de propriétés
+
+Un générateur `genIR(designSystem, profondeur ≤ 5, largeur ≤ 4)` produit des arbres bien typés, en forme normale, avec tokens tirés d'un design system de fixture. Il inclut délibérément les cas limites : Stack vide, Text vide, Stack sans enfants avec `between`, `fill` multiples, `hug` imbriqués, surcharges partielles.
+
+Chaque loi est un test de propriété sur `genIR` avec shrinking. Le shrinking produit le plus petit contre-exemple, qui est ajouté aux golden tests (§8.2) une fois corrigé.
+
+### 8.2 Golden tests
+
+Un dossier `examples/` avec des écrans écrits à la main (dont celui de §10), et pour chacun : la sortie CSS attendue, la sortie SwiftUI attendue, la géométrie de référence à trois viewports. Un changement de sortie est un changement de spec et se relit comme tel.
+
+### 8.3 Géométrie des backends (loi 3)
+
+- CSS : Playwright, page compilée, lecture des `getBoundingClientRect` par `data-ir` id, comparaison à `geometry_ref` avec la même police (police de test embarquée, métriques connues).
+- SwiftUI : cible de test XCTest qui héberge la vue compilée, lit les frames via `GeometryReader` injecté par l'identifiant `.irNode`, compare. Plus lourd ; s'exécute sur macOS uniquement, hors du chemin critique CI Linux, mais bloquant avant un tag.
+
+### 8.4 Importeurs
+
+- DOM → IR : Playwright sur un corpus de pages, extraction des boîtes flex, tentative d'import, classification du résultat (importé / rejeté avec code d'erreur). Le taux d'import est une métrique du papier, pas un test.
+- Figma → IR : plugin qui sérialise l'arbre auto-layout en JSON ; l'importeur consomme ce JSON. Les tests tournent sur des fixtures JSON, sans Figma.
+- Penpot → IR : format de fichier ouvert, importeur direct. Sert de terrain de test hors ligne pour la loi 1 quand Figma n'est pas disponible.
+
+---
+
+## 9. Structure du code généré
+
+Principe (ADR-002) : deux zones séparées syntaxiquement. La zone générée contient exactement le fragment design-relevant et est régénérée à chaque compilation. La zone préservée contient la logique et n'est jamais écrite par le compilateur après sa création initiale.
+
+### 9.1 Backend CSS (cible React + CSS Modules en v0)
+
+```
+Login.ir
+Login.gen.tsx        zone générée : composant LoginLayout, props = slots, data-ir sur chaque nœud
+Login.gen.module.css zone générée : une classe par nœud, tokens via variables CSS
+Login.tsx            zone préservée : composant Login, logique, passe les slots à LoginLayout
+Login.stories.tsx    zone générée : story avec les placeholders
+```
+
+`decompile_css` lit `Login.gen.tsx` et `Login.gen.module.css` uniquement.
+
+### 9.2 Backend SwiftUI
+
+```
+Login.ir
+LoginLayout.gen.swift   zone générée : struct LoginLayout, paramètres = slots, .irNode("id"), #Preview avec placeholders
+LoginView.swift         zone préservée : struct LoginView, @State, logique, instancie LoginLayout
+```
+
+`decompile_swiftui` lit `LoginLayout.gen.swift` uniquement. Le fichier généré n'utilise que le sous-ensemble de SwiftUI listé dans §11.2, ce qui rend la décompilation un parsing de forme, pas une analyse sémantique.
+
+### 9.3 Slots
+
+Un `slot(nom)` sur un `Text` devient un paramètre `nom: String`. Sur une `Image`, un paramètre `nom: ImageSource` (type défini dans un support library minimal, un fichier par backend). Le placeholder correspondant alimente la story ou le `#Preview`. Un slot non fourni par la zone préservée est une erreur de compilation du langage cible, pas de l'IR : c'est le système de types du code qui garde cette frontière.
+
+### 9.4 Identifiants
+
+Chaque nœud est marqué par son `#id` dans le code généré (`data-ir="id"` en HTML, `.irNode("id")` en SwiftUI). C'est ce marquage qui permet la loi 2 sur des arbres réels et la loi 3 par lecture de géométrie.
+
+---
+
+## 10. Exemple complet
+
+### 10.1 Source
+
+```
+screen Login {
+  Stack #root (dir: v, w: fill, h: fill, pad: $space.lg, gap: $space.md,
+               mainAlign: center, crossAlign: stretch, bg: $color.bg.canvas)
+               @expanded(pad: $space.xl, maxW: 480) {
+
+    Text #title (style: $type.heading.lg, color: $color.text.primary, role: heading(1))
+      "Bienvenue"
+
+    Text #subtitle (style: $type.body.md, color: $color.text.secondary, maxLines: 2)
+      slot(subtitle)
+
+    Stack #form (dir: v, gap: $space.sm) {
+      Box #email (h: fixed(48), bg: $color.bg.field, radius: $radius.md,
+                  border: ($size.hairline, $color.border.default),
+                  role: textfield, label: "Email")
+      Box #password (h: fixed(48), bg: $color.bg.field, radius: $radius.md,
+                     border: ($size.hairline, $color.border.default),
+                     role: textfield, label: "Mot de passe")
+    }
+
+    Stack #actions (dir: h, gap: $space.sm, crossAlign: center) {
+      Stack #primary (dir: h, w: fill, h: fixed(48), mainAlign: center, crossAlign: center,
+                      bg: $color.accent, radius: $radius.md, role: button) {
+        Text #primaryLabel (style: $type.label.md, color: $color.text.onAccent) "Continuer"
+      }
+      Icon #help (name: $icon.help, size: $size.icon.md, color: $color.text.secondary)
+    }
+  }
+}
+```
+
+Note : `#email` et `#password` sont des `Box` avec `role: textfield` parce que les composants sont hors scope v0. Quand la couche composants arrivera, ces deux nœuds deviendront `Field(variant: outlined)` et le reste de l'écran ne changera pas. C'est le test de la restriction « le layout d'abord » : elle ne doit pas coûter de réécriture plus tard.
+
+### 10.2 Sortie CSS (extrait)
+
+```css
+.root {
+  display: flex; flex-direction: column;
+  width: 100%; height: 100%;
+  padding: var(--space-lg); gap: var(--space-md);
+  justify-content: center; align-items: stretch;
+  background: var(--color-bg-canvas);
+}
+@media (min-width: 600px) {
+  .root { padding: var(--space-xl); max-width: 480px; }
+}
+.form { display: flex; flex-direction: column; gap: var(--space-sm); }
+.email {
+  height: 48px;
+  background: var(--color-bg-field); border-radius: var(--radius-md);
+  border: var(--size-hairline) solid var(--color-border-default);
+}
+.actions { display: flex; flex-direction: row; gap: var(--space-sm); align-items: center; }
+.primary {
+  display: flex; flex-direction: row;
+  flex: 1 1 0; height: 48px;
+  justify-content: center; align-items: center;
+  background: var(--color-accent); border-radius: var(--radius-md);
+}
+```
+
+```tsx
+export function LoginLayout({ subtitle }: { subtitle: string }) {
+  return (
+    <div className={s.root} data-ir="root">
+      <h1 className={s.title} data-ir="title">Bienvenue</h1>
+      <p className={s.subtitle} data-ir="subtitle">{subtitle}</p>
+      <div className={s.form} data-ir="form">
+        <div className={s.email} data-ir="email" role="textbox" aria-label="Email" />
+        <div className={s.password} data-ir="password" role="textbox" aria-label="Mot de passe" />
+      </div>
+      <div className={s.actions} data-ir="actions">
+        <div className={s.primary} data-ir="primary" role="button">
+          <span className={s.primaryLabel} data-ir="primaryLabel">Continuer</span>
+        </div>
+        <Icon name="help" className={s.help} data-ir="help" />
+      </div>
+    </div>
+  );
+}
+```
+
+Le littéral "Bienvenue" est compilé en dur parce que c'est un placeholder sur un nœud sans slot : il est design-owned. Si le titre devait venir des données, le design l'aurait écrit `slot(title)`.
+
+### 10.3 Sortie SwiftUI (extrait)
+
+```swift
+struct LoginLayout: View {
+  let subtitle: String
+
+  var body: some View {
+    VStack(alignment: .center, spacing: T.space.md) {
+      Spacer(minLength: 0)
+      Text("Bienvenue")
+        .font(T.type.heading.lg).foregroundStyle(T.color.text.primary)
+        .accessibilityAddTraits(.isHeader)
+        .irNode("title")
+      Text(subtitle)
+        .font(T.type.body.md).foregroundStyle(T.color.text.secondary)
+        .lineLimit(2)
+        .irNode("subtitle")
+      VStack(spacing: T.space.sm) {
+        RoundedRectangle(cornerRadius: T.radius.md)
+          .fill(T.color.bg.field)
+          .frame(height: 48)
+          .overlay(RoundedRectangle(cornerRadius: T.radius.md)
+                     .stroke(T.color.border.default, lineWidth: T.size.hairline))
+          .accessibilityLabel("Email")
+          .irNode("email")
+        // password : idem
+      }
+      .irNode("form")
+      HStack(alignment: .center, spacing: T.space.sm) {
+        HStack { Text("Continuer").font(T.type.label.md).foregroundStyle(T.color.text.onAccent) }
+          .frame(maxWidth: .infinity)
+          .frame(height: 48)
+          .background(T.color.accent, in: RoundedRectangle(cornerRadius: T.radius.md))
+          .accessibilityAddTraits(.isButton)
+          .irNode("primary")
+        Image(systemName: T.icon.help).font(.system(size: T.size.icon.md))
+          .foregroundStyle(T.color.text.secondary)
+          .irNode("help")
+      }
+      .irNode("actions")
+      Spacer(minLength: 0)
+    }
+    .padding(sizeClass == .compact ? T.space.lg : T.space.xl)
+    .frame(maxWidth: sizeClass == .compact ? .infinity : 480)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(T.color.bg.canvas)
+    .irNode("root")
+  }
+
+  @Environment(\.horizontalSizeClass) private var sizeClass
+}
+
+#Preview { LoginLayout(subtitle: "Connectez-vous pour continuer") }
+```
+
+Deux points à retenir sur cette sortie :
+- `mainAlign: center` sur un Stack `fill` devient une paire de `Spacer`. Un Stack `hug` n'en génère pas, puisqu'il n'a pas d'espace libre.
+- `crossAlign: stretch` n'a pas de traduction directe en SwiftUI ; il est compilé en `.frame(maxWidth: .infinity)` sur chaque enfant `hug` concerné. C'est un cas où la décompilation doit reconnaître un motif (tous les enfants portent le même modificateur) pour retrouver la propriété du parent. §11.2 liste ces motifs.
+
+---
+
+## 11. Tables de correspondance
+
+### 11.1 IR → CSS
+
+| IR | CSS |
+|---|---|
+| `Stack(dir: v)` | `display: flex; flex-direction: column` |
+| `Stack(dir: h)` | `display: flex; flex-direction: row` |
+| `gap: $t` | `gap: var(--t)` |
+| `pad: ...` | `padding: ...` |
+| `w: fixed(n)` | `width: n px; flex-shrink: 0` (si sur main) |
+| `w: hug` (main) | `flex: 0 0 auto` |
+| `w: hug` (cross) | `align-self: flex-start` (sauf si parent `stretch`) |
+| `w: fill` (main) | `flex: 1 1 0; min-width: 0` |
+| `w: fill` (cross) | `align-self: stretch` |
+| `minW`, `maxW`, ... | `min-width`, `max-width`, ... |
+| `mainAlign` | `justify-content: flex-start / center / flex-end / space-between` |
+| `crossAlign` | `align-items: flex-start / center / flex-end / stretch` |
+| `overflow: clip` | `overflow: hidden` |
+| `overflow: scroll` | `overflow-y: auto` (v) / `overflow-x: auto` (h) |
+| `bg`, `radius`, `border`, `shadow`, `opacity` | propriétés homonymes, valeurs via variables CSS |
+| `Text.style: $type.x` | classe utilitaire générée depuis le token composite (font, size, line-height, weight, letter-spacing) |
+| `Text.maxLines: n` | `display: -webkit-box; -webkit-line-clamp: n; -webkit-box-orient: vertical; overflow: hidden` |
+| `Image.fit` | `object-fit: cover / contain` |
+| `Image.ratio: (w, h)` | `aspect-ratio: w / h` |
+| `role: heading(n)` | balise `<hn>` |
+| `role: button` | `role="button"` (ou `<button>` quand la couche composants existera) |
+| `role: textfield` | `role="textbox"` |
+| `role: decorative` | `aria-hidden="true"` |
+| `label` | `aria-label` |
+| `@expanded(...)` | `@media (min-width: 600px) { ... }` |
+
+Le seuil 600 est lu dans le design system (`$bp.expanded`), jamais codé en dur dans le compilateur.
+
+### 11.2 IR → SwiftUI
+
+Sous-ensemble de SwiftUI autorisé dans la zone générée : `VStack`, `HStack`, `Spacer`, `Text`, `Image`, `RoundedRectangle`, `ScrollView`, et les modificateurs `.frame`, `.padding`, `.background`, `.overlay`, `.clipped`, `.clipShape`, `.opacity`, `.shadow`, `.font`, `.foregroundStyle`, `.lineLimit`, `.multilineTextAlignment`, `.aspectRatio`, `.accessibilityLabel`, `.accessibilityAddTraits`, `.irNode`. Rien d'autre. La décompilation est un parsing de ce sous-ensemble.
+
+| IR | SwiftUI |
+|---|---|
+| `Stack(dir: v)` | `VStack(alignment:, spacing:)` |
+| `Stack(dir: h)` | `HStack(alignment:, spacing:)` |
+| `gap` | `spacing:` |
+| `pad` | `.padding(...)` |
+| `w: fixed(n)` | `.frame(width: n)` |
+| `w: hug` | défaut (aucun modificateur) |
+| `w: fill` | `.frame(maxWidth: .infinity)` |
+| `minW`, `maxW` | `.frame(minWidth:, maxWidth:)` |
+| `mainAlign: start` (Stack fill) | `Spacer(minLength: 0)` en fin |
+| `mainAlign: end` (Stack fill) | `Spacer(minLength: 0)` en début |
+| `mainAlign: center` (Stack fill) | `Spacer` en début et en fin |
+| `mainAlign: between` (Stack fill) | `Spacer` entre chaque paire d'enfants |
+| `mainAlign` (Stack hug) | rien |
+| `crossAlign: start/center/end` | `alignment: .leading/.center/.trailing` (V) ou `.top/.center/.bottom` (H) |
+| `crossAlign: stretch` | `.frame(maxWidth: .infinity)` (V) ou `maxHeight` (H) sur chaque enfant `hug` |
+| `overflow: clip` | `.clipped()` |
+| `overflow: scroll` | envelopper dans `ScrollView(.vertical / .horizontal)` |
+| `bg` | `.background(color, in: shape)` |
+| `radius` | `RoundedRectangle(cornerRadius:)` comme shape de background ou `.clipShape` |
+| `border` | `.overlay(shape.stroke(color, lineWidth:))` |
+| `Text.maxLines` | `.lineLimit(n)` |
+| `Text.align` | `.multilineTextAlignment` |
+| `Image.fit` | `.aspectRatio(contentMode: .fill / .fit)` |
+| `role: heading` | `.accessibilityAddTraits(.isHeader)` |
+| `role: button` | `.accessibilityAddTraits(.isButton)` |
+| `role: decorative` | `.accessibilityHidden(true)` |
+| `@expanded(...)` | `@Environment(\.horizontalSizeClass)` et expressions conditionnelles dans les modificateurs |
+
+Motifs que la décompilation doit reconnaître (parce que la propriété du parent est éclatée sur les enfants ou en Spacers) :
+- N enfants portant tous `.frame(maxWidth: .infinity)` sous un `VStack` → `crossAlign: stretch` sur le parent.
+- Spacers en tête / queue / entre → `mainAlign`.
+- `sizeClass == .compact ? a : b` dans un modificateur → surcharge `@expanded`.
+
+Approximation assumée (documentée dans le papier) : la size class SwiftUI n'est pas strictement un seuil de largeur. Sur iPhone en portrait elle est toujours `compact` ; sur iPad elle dépend du multitâche. C'est acceptable en v0 parce que le design system ne définit que deux breakpoints. Si un troisième breakpoint apparaît, le backend SwiftUI devra passer à un seuil de largeur explicite via `GeometryReader`.
+
+### 11.3 Figma auto-layout → IR
+
+| Figma | IR |
+|---|---|
+| Frame avec auto-layout vertical / horizontal | `Stack(dir: v / h)` |
+| Item spacing | `gap` (résolu vers le token le plus proche ; erreur E001 si aucun token ne correspond exactement, sauf en mode tolérant) |
+| Padding | `pad` (idem) |
+| Fixed width | `w: fixed(n)` |
+| Hug contents | `w: hug` |
+| Fill container | `w: fill` |
+| Min / max width | `minW` / `maxW` |
+| Primary axis alignment | `mainAlign` (`space between` → `between`) |
+| Counter axis alignment | `crossAlign` |
+| Clip content | `overflow: clip` |
+| Fill (solid, lié à une variable) | `bg: $color.*` |
+| Corner radius (variable) | `radius` |
+| Stroke (variable) | `border` |
+| Text node avec style | `Text(style: $type.*)` |
+| Text « Truncate text » + max lines | `maxLines`, `truncate: end` |
+| Frame avec image fill | `Image(fit: cover / contain)` |
+| Instance de composant icône | `Icon` (si le composant appartient au jeu d'icônes déclaré) |
+| Frame nommée `slot:nom` contenant un texte | `Text(...) slot(nom)` |
+| Deux frames nommées `Login/compact` et `Login/expanded` | un écran avec surcharges `@expanded`, si et seulement si les arbres sont structurellement identiques (E008 sinon) |
+
+Rejets explicites (erreur E003 avec chemin du calque) : frame sans auto-layout contenant plus d'un enfant, position absolue, rotation, wrap, grid, effets non tokenisés, couleurs non liées à une variable, groupes, masques, booléens de formes.
+
+Le mode tolérant (`--tolerant`) arrondit les valeurs numériques au token le plus proche et émet W002 ; il sert à l'exploration d'un fichier existant, jamais à la génération de fichiers `.ir` commités.
+
+---
+
+## 12. Erreurs et avertissements
+
+| Code | Type | Message | Où |
+|---|---|---|---|
+| E001 | erreur | Valeur littérale là où un token est requis | parse, import |
+| E002 | erreur | Token inconnu dans le design system | typecheck |
+| E003 | erreur | Construction non représentable dans l'IR | import |
+| E004 | erreur | Propriété invalide pour ce type de nœud | parse |
+| E005 | erreur | Identifiant dupliqué | parse |
+| E006 | erreur | Image sans dimension résolvable | typecheck |
+| E007 | erreur | `fill` sous une contrainte infinie (Stack `scroll` sur le même axe, ou racine sans viewport) | layout |
+| E008 | erreur | Frames de breakpoints structurellement différentes | import |
+| W001 | avert. | `fill` dans un parent `hug`, normalisé en `hug` | normalize |
+| W002 | avert. | Valeur arrondie au token le plus proche (mode tolérant) | import |
+| W003 | avert. | Surcharge sans effet, supprimée | normalize |
+
+Un message d'erreur contient toujours : le code, le chemin du nœud (`root/form/email`), la ligne et la colonne si la source est un `.ir`, le nom du calque si la source est un import, et une phrase qui dit quoi faire.
+
+---
+
+## 13. Questions ouvertes
+
+À trancher par ADR avant la première implémentation. Chaque question indique l'option par défaut si personne ne tranche.
+
+1. **Nom du langage et extension.** `.ir` est un nom de travail. Défaut : garder `.ir` jusqu'au papier.
+2. **Syntaxe humaine ou JSON seul.** La syntaxe de §3 est plus lisible et plus proche des langages que les modèles connaissent ; le JSON seul économise un parseur. Défaut : les deux, la syntaxe humaine étant canonique et le JSON dérivé.
+3. **Dimensions littérales.** Faut-il exiger un token `$size.*` même pour `fixed` et `maxW` ? Plus strict, mais impose de tokeniser des valeurs uniques comme 480. Défaut : littéraux autorisés pour `fixed`/`min`/`max`, tokens obligatoires pour `gap`/`pad`.
+4. **Cible web.** React + CSS Modules en v0. Alternative : HTML + CSS pur (plus universel, décompilation plus simple, pas de slots typés). Défaut : React, parce que les slots typés sont l'endroit où la frontière design/code devient vérifiable par le compilateur TypeScript.
+5. **Icônes.** Jeu d'icônes déclaré dans le design system, ou SF Symbols côté iOS avec table de correspondance ? Défaut : jeu déclaré, une table de correspondance par backend, une icône absente est E002.
+6. **Scroll et `fill`.** Un enfant `fill` sur l'axe de scroll d'un Stack `scroll` reçoit une contrainte infinie (E007). Alternative : l'interpréter comme `hug`. Défaut : E007, parce que l'erreur révèle presque toujours une intention floue du design.
+7. **Troisième breakpoint.** Le design system peut-il en déclarer trois (compact, medium, expanded) dès la v0 ? Cela casse la correspondance directe avec les size classes SwiftUI. Défaut : non, deux en v0, et l'ADR-003 le note comme extension.
+8. **Identifiants générés.** Le hash de chemin change quand un frère est inséré avant. Alternative : ids aléatoires figés au premier commit. Défaut : hash de chemin en v0, à revoir quand la préservation des modifications manuelles entrera dans le scope.
+
+---
+
+## 14. Glossaire
+
+- **Adjonction** : paire de traductions entre deux mondes, lossy dans un sens, avec des lois qui bornent la perte. Ici : IR ↔ design et IR ↔ code.
+- **Axe principal / secondaire** : direction d'empilement d'un Stack et sa perpendiculaire.
+- **Backend** : compilateur de l'IR vers une cible (CSS, SwiftUI, plus tard Compose).
+- **Breakpoint** : classe de largeur de viewport nommée par le design system.
+- **Décompilation** : lecture de la zone générée d'un code pour retrouver l'IR.
+- **Forme normale** : représentation canonique d'un IR, unique, utilisée pour toute comparaison.
+- **Fragment design-relevant** : ce que l'IR gouverne, défini dans ADR-002.
+- **Hug / fill / fixed** : les trois modes de dimension par axe.
+- **Importeur** : lecture d'un artefact de design (Figma, Penpot, DOM) vers l'IR.
+- **Placeholder** : contenu d'exemple fourni par le design, compilé vers les previews.
+- **Slot** : contenu fourni par le code, exposé comme paramètre de la zone générée.
+- **Token** : valeur nommée du design system, référencée par `$groupe.nom`.
+- **Zone générée / préservée** : les deux parties du code produit, l'une réécrite à chaque compilation, l'autre jamais.
