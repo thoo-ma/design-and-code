@@ -65,13 +65,24 @@ const HARNESS_CSS = `#ir-mount {
 `;
 
 /**
- * Chromium local : `playwright install` dans la CI, ou le chemin donné par
- * `IR_CHROMIUM_PATH` quand l'environnement fournit déjà un binaire.
+ * Rendu de police sans hinting : les avances restent fractionnaires, celles
+ * que la police de test déclare (§8.3). Sans cela, un navigateur qui arrondit
+ * au pixel entier mesure 17 px là où la police en déclare 16,8, et la loi 3
+ * échoue sur un écart proportionnel à la longueur du texte.
+ */
+export const LAUNCH_ARGS = ["--font-render-hinting=none"];
+
+/**
+ * Chromium **complet**, jamais le *headless shell* de Playwright, dont le
+ * rendu de texte est hinté : `channel: "chromium"` dans la CI, ou le binaire
+ * donné par `IR_CHROMIUM_PATH` quand l'environnement en fournit déjà un.
  */
 export async function launchBrowser(): Promise<Browser> {
   const executablePath = process.env["IR_CHROMIUM_PATH"];
   return chromium.launch(
-    executablePath === undefined ? {} : { executablePath },
+    executablePath === undefined
+      ? { channel: "chromium", args: LAUNCH_ARGS }
+      : { executablePath, args: LAUNCH_ARGS },
   );
 }
 
