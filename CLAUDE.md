@@ -46,7 +46,7 @@ Layout absolu, rotation, wrap, grid, poids sur `fill`, animation de layout, comp
 
 ## Style de code
 
-TypeScript strict, pas de `any`. Fonctions pures dans `ir-core` et `ir-layout-ref` (aucune I/O). Erreurs typées avec code (E001…E008, W001…W003), jamais de `throw` de string. Vitest + fast-check pour les propriétés. Pas de dépendance runtime dans `ir-core` hors zod.
+TypeScript strict, pas de `any`. Fonctions pures dans `ir-core` et `ir-layout-ref` (aucune I/O). Erreurs typées avec code (E001…E010, W001…W003), jamais de `throw` de string. Vitest + fast-check pour les propriétés. Pas de dépendance runtime dans `ir-core` hors zod.
 
 ## Packages
 

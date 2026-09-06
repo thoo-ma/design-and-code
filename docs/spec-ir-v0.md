@@ -789,7 +789,7 @@ Chaque question est tranchée par un ADR avant la tâche qu'elle bloque, ou not�
 3. **Dimensions littérales.** Tranché par l'ADR-004 : littéraux ou `$size.*` pour `fixed`, `min`, `max` ; tokens obligatoires pour `gap`, `pad` et le style.
 4. **Cible web.** Tranché par l'ADR-009 : React + CSS Modules, parce que les slots typés sont l'endroit où la frontière design/code devient vérifiable par le compilateur TypeScript.
 5. **Icônes.** Tranché par l'ADR-005 : jeu déclaré dans le design system, un nom par backend, E002 si absent.
-6. **Scroll et `fill`.** Un enfant `fill` sur l'axe de scroll d'un Stack `scroll` reçoit une contrainte infinie (E007). Alternative : l'interpréter comme `hug`. Défaut : E007, parce que l'erreur révèle presque toujours une intention floue du design. **Ouverte, à trancher avant T6.**
+6. **Scroll et `fill`.** Tranché par l'ADR-008 : un enfant `fill` sur l'axe de défilement d'un Stack `scroll` est E007, détectée au typecheck quand c'est statiquement décidable et au layout sinon. L'alternative, l'interpréter comme `hug`, rendrait la loi 3 fausse par construction.
 7. **Troisième breakpoint.** Tranché par l'ADR-003 : deux breakpoints en v0, l'extension est notée là.
 8. **Identifiants générés.** Tranché par l'ADR-007 : hash du chemin d'indices et du type.
 
