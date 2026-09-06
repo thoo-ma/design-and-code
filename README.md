@@ -6,12 +6,13 @@ Un langage intermédiaire pour les interfaces, dont le design et le code sont de
 
 ## Lire dans cet ordre
 
-1. `docs/adr/001-ir-source-de-verite.md` — pourquoi une IR plutôt que Figma ou le code
-2. `docs/adr/002-adjonction-et-fragment.md` — les lois, et la frontière design/code
-3. `docs/adr/003-layout-dabord.md` — par où on commence
-4. `docs/spec-ir-v0.md` — la spec du langage, qui fait autorité sur tout comportement
-5. `TASKS.md` — le plan de travail
-6. `CLAUDE.md` — le contexte pour les agents
+1. `docs/architecture.md` — la carte : les trois mondes, les lois, les packages, en diagrammes
+2. `docs/adr/001-ir-source-de-verite.md` — pourquoi une IR plutôt que Figma ou le code
+3. `docs/adr/002-adjonction-et-fragment.md` — les lois, et la frontière design/code
+4. `docs/adr/003-layout-dabord.md` — par où on commence
+5. `docs/spec-ir-v0.md` — la spec du langage, qui fait autorité sur tout comportement
+6. `TASKS.md` — le plan de travail
+7. `CLAUDE.md` — le contexte pour les agents
 
 ## Décisions
 
@@ -74,8 +75,49 @@ La CI (`.github/workflows/ci.yml`) lance les quatre premières vérifications en
 
 ## Structure
 
+Le design et le code ne se parlent jamais directement : tout passe par l'IR. Chaque traduction a sa réciproque, et c'est l'aller-retour qui porte la loi (spec §7).
+
+```mermaid
+flowchart LR
+  figma["Figma<br/>arbre auto-layout"]
+  dom["Page web<br/>DOM sérialisé"]
+
+  ir["L'IR<br/>Login.ir · AST<br/>forme normale N"]
+
+  web["React + CSS Modules<br/>Login.gen.tsx<br/>Login.gen.module.css"]
+  swift["SwiftUI<br/>LoginLayout.gen.swift"]
+
+  gref["geometry_ref<br/>ir-layout-ref"]
+  gcss["geometry_css<br/>Chromium"]
+
+  figma -- "import_figma · L1" --> ir
+  ir -. "export_figma · L1" .-> figma
+  dom -- "import_dom" --> ir
+  ir -- "parse · print · L0" --> ir
+
+  ir -- "compile_css · L2" --> web
+  web -- "decompile_css · L2" --> ir
+  ir -- "compile_swiftui · L2" --> swift
+  swift -- "decompile_swiftui · L2" --> ir
+
+  ir -- "layout()" --> gref
+  web -- "getBoundingClientRect" --> gcss
+  gref -. "L3 — à 1 u près" .-> gcss
+
+  classDef coeur fill:#dbeafe,stroke:#2563eb,color:#16314f
+  classDef externe fill:#f3e8ff,stroke:#9333ea,color:#3b1160
+  classDef cible fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef mesure fill:#fef3c7,stroke:#d97706,color:#4a2c05
+  class ir coeur
+  class figma,dom externe
+  class web,swift cible
+  class gref,gcss mesure
 ```
-docs/            spec et ADR
+
+`docs/architecture.md` déplie cette carte : les cinq lois et où vivent leurs tests, le pipeline de `ir-core` avec les codes d'erreur posés sur l'étape qui les émet, la loi 3 en détail, les deux zones du code généré, le graphe des packages.
+
+```
+docs/            spec, ADR et la carte de l'architecture
 examples/        Login.ir et ses sorties golden : code compilé, géométrie de référence
 fixtures/        design system minimal (DTCG) et sorties attendues du compilateur de tokens
 packages/        ir-core, ir-layout-ref, backends, importeurs
