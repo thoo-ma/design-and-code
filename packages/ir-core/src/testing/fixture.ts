@@ -7,13 +7,14 @@
  * qui lève.
  */
 
-import { loadDesignSystem } from "../design-system.js";
-import type { DesignSystem } from "../design-system.js";
+import { loadDesignSystem, loadThemedDesignSystem } from "../design-system.js";
+import type { DesignSystem, ThemedDesignSystem } from "../design-system.js";
 
 import fixtureIcons from "../../../../fixtures/design-system/icons.json" with { type: "json" };
+import fixtureDarkTokens from "../../../../fixtures/design-system/tokens.dark.json" with { type: "json" };
 import fixtureTokens from "../../../../fixtures/design-system/tokens.json" with { type: "json" };
 
-export { fixtureIcons, fixtureTokens };
+export { fixtureDarkTokens, fixtureIcons, fixtureTokens };
 
 const loaded = loadDesignSystem(fixtureTokens, fixtureIcons);
 if (!loaded.ok) {
@@ -23,3 +24,17 @@ if (!loaded.ok) {
 }
 
 export const fixtureDesignSystem: DesignSystem = loaded.value;
+
+const themed = loadThemedDesignSystem(
+  fixtureTokens,
+  fixtureDarkTokens,
+  fixtureIcons,
+);
+if (!themed.ok) {
+  throw new Error(
+    `Mode sombre de fixture invalide :\n${themed.errors.map((e) => `${e.code} ${e.path} : ${e.message}`).join("\n")}`,
+  );
+}
+
+/** Base et mode sombre de la fixture, pour le compilateur de tokens. */
+export const fixtureThemedDesignSystem: ThemedDesignSystem = themed.value;

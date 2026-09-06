@@ -1,3 +1,3 @@
-// T0 : module vide, aucun comportement. `export {}` suffit à en faire un
-// module ES (requis par isolatedModules / verbatimModuleSyntax).
-export {};
+// ir-backend-swiftui : compilateur de tokens (T5). Compile et decompile de
+// l'IR vers SwiftUI viendront en T11.
+export * from "./tokens.js";

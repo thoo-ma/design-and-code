@@ -1,4 +1,4 @@
-// Généré depuis tokens.json + tokens.dark.json. Golden test du compilateur de tokens, cible SwiftUI.
+// Généré depuis tokens.json + tokens.dark.json par le compilateur de tokens, cible SwiftUI. Ne pas éditer.
 // Nommage : $groupe.sous.nom -> T.groupe.sous.nom. Les primitives (palette, font) ne sont pas émises.
 // Le mode sombre est résolu par UIColor dynamique : l'IR et le code généré n'en savent rien.
 

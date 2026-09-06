@@ -29,6 +29,17 @@ export interface DesignSystem {
   readonly breakpoints: ReadonlyMap<string, number>;
   /** `icons.json` : nom → nom par backend (`web`, `ios`, `android`). */
   readonly icons: ReadonlyMap<string, Readonly<Record<string, string>>>;
+  /** Groupes marqués non référençables, chemins pointés, dans l'ordre du fichier. */
+  readonly privateGroups: readonly string[];
+}
+
+/** Design system avec son mode sombre (overlay DTCG fusionné sur la base). */
+export interface ThemedDesignSystem {
+  readonly light: DesignSystem;
+  /** Base fusionnée avec l'overlay sombre ; absent sans overlay. */
+  readonly dark: DesignSystem | undefined;
+  /** Clés des tokens que l'overlay sombre définit, dans l'ordre de l'overlay. */
+  readonly darkKeys: readonly string[];
 }
 
 /** Type DTCG attendu pour chaque groupe référençable par l'IR (spec §2). */
@@ -97,6 +108,7 @@ export function loadDesignSystem(
 
   // 1. Collecte des tokens bruts, avec héritage de $type et de referenceable.
   const raw = new Map<string, RawEntry>();
+  const privateGroups: string[] = [];
   const walk = (
     group: Json,
     path: readonly string[],
@@ -117,6 +129,7 @@ export function loadDesignSystem(
       const ownType =
         typeof child["$type"] === "string" ? child["$type"] : undefined;
       const childRef = referenceable && !isPrivate(child);
+      if (referenceable && !childRef) privateGroups.push(dotted);
       if ("$value" in child) {
         raw.set(dotted, {
           path: childPath,
@@ -170,10 +183,15 @@ export function loadDesignSystem(
     return out;
   };
   for (const key of raw.keys()) resolveEntry(key);
+  const ordered = new Map<string, TokenEntry>();
+  for (const key of raw.keys()) {
+    const entry = resolved.get(key);
+    if (entry !== undefined) ordered.set(key, entry);
+  }
 
   // 3. Breakpoints : groupe bp, dimensions en px.
   const breakpoints = new Map<string, number>();
-  for (const entry of resolved.values()) {
+  for (const entry of ordered.values()) {
     if (entry.path.length === 2 && entry.path[0] === "bp") {
       const name = entry.path[1] ?? "";
       const px = dimensionPx(entry.value);
@@ -215,7 +233,58 @@ export function loadDesignSystem(
   }
 
   if (errors.length > 0) return fail(errors);
-  return ok({ tokens: resolved, breakpoints, icons: iconMap });
+  return ok({ tokens: ordered, breakpoints, icons: iconMap, privateGroups });
+}
+
+/**
+ * Fusion profonde de deux arbres DTCG : l'overlay remplace la base clé par
+ * clé, et une clé `$…` (dont `$value`) est remplacée entière.
+ */
+export function mergeTokens(base: unknown, overlay: unknown): unknown {
+  if (!isObject(base) || !isObject(overlay))
+    return overlay === undefined ? base : overlay;
+  const out: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(overlay)) {
+    out[key] =
+      key.startsWith("$") || !(key in base)
+        ? value
+        : mergeTokens(base[key], value);
+  }
+  return out;
+}
+
+/** Chemins pointés des tokens (nœuds avec `$value`) d'un arbre DTCG, dans l'ordre du fichier. */
+export function listTokenKeys(tokens: unknown): readonly string[] {
+  const out: string[] = [];
+  const walk = (node: Json, path: readonly string[]): void => {
+    for (const [key, child] of Object.entries(node)) {
+      if (key.startsWith("$") || !isObject(child)) continue;
+      const childPath = [...path, key];
+      if ("$value" in child) out.push(childPath.join("."));
+      else walk(child, childPath);
+    }
+  };
+  if (isObject(tokens)) walk(tokens, []);
+  return out;
+}
+
+/** Charge la base, puis la base fusionnée avec l'overlay sombre s'il est fourni. */
+export function loadThemedDesignSystem(
+  tokens: unknown,
+  darkOverlay: unknown,
+  icons?: unknown,
+): Result<ThemedDesignSystem> {
+  const light = loadDesignSystem(tokens, icons);
+  if (!light.ok) return fail(light.errors);
+  if (darkOverlay === undefined)
+    return ok({ light: light.value, dark: undefined, darkKeys: [] });
+  const dark = loadDesignSystem(mergeTokens(tokens, darkOverlay), icons);
+  if (!dark.ok) return fail(dark.errors);
+  return ok({
+    light: light.value,
+    dark: dark.value,
+    darkKeys: listTokenKeys(darkOverlay),
+  });
 }
 
 function isPrivate(node: Json): boolean {
