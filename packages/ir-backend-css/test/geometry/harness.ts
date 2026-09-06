@@ -27,7 +27,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ComponentType } from "react";
 
 import { compileCss, compileTokensCss } from "../../src/index.js";
-import { RESET_CSS, SUPPORT_TSX } from "../../src/index.js";
+import { RESET_CSS, SUPPORT_FILE_NAME, SUPPORT_TSX } from "../../src/index.js";
 
 import { TEST_FONT_FAMILY, testFontBase64 } from "./font.js";
 
@@ -112,7 +112,7 @@ export async function pageOf(
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, out.files.tsx), out.tsx);
   writeFileSync(join(dir, out.files.css), out.css);
-  writeFileSync(join(dir, "ir-support.tsx"), SUPPORT_TSX);
+  writeFileSync(join(dir, SUPPORT_FILE_NAME), SUPPORT_TSX);
   const module: Readonly<Record<string, unknown>> = (await import(
     /* @vite-ignore */ pathToFileURL(join(dir, out.files.tsx)).href
   )) as Readonly<Record<string, unknown>>;

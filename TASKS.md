@@ -30,7 +30,7 @@ Critère de fin : les types compilent, un AST écrit à la main pour `examples/L
 
 Parseur descendant récursif de la grammaire spec §3.1, avec positions (ligne, colonne) sur chaque nœud pour les messages d'erreur. `print` produit la forme canonique : indentation 2, ordre des propriétés de la spec §6 règle 5, une propriété par ligne au-delà de 80 colonnes.
 
-Tests : loi 0 (`parse(print(ir)) ≡ ir`) sur `genIR` ; golden test sur `examples/Login.ir` (parse puis print doit redonner le fichier à l'octet près) ; un test par code d'erreur syntaxique (E004, E005).
+Tests : loi 0 (`parse(print(ir)) ≡ ir`) sur `genIR` ; golden test sur `examples/Login.ir` (parse puis print doit redonner le fichier à l'octet près) ; un test par code d'erreur émis au parse (E001, E004, E005, E009).
 
 Critère de fin : L0 verte sur 1000 cas générés.
 
@@ -108,6 +108,8 @@ Compile + decompile, sous-ensemble SwiftUI de la spec §11.2. La décompilation 
 
 Tests L2 sur macOS. L3 par XCTest, hors chemin critique CI mais bloquant avant tag.
 
+Point d'attention : `TokenCompilerOptions`, `isObject` et `rgb255` sont aujourd'hui identiques dans `packages/ir-backend-css/src/tokens.ts` et `packages/ir-backend-swiftui/src/tokens.ts`. Deux lectures DTCG qui peuvent diverger. Les fondre ici plutôt qu'avant : c'est T11 qui donne au backend SwiftUI sa vraie masse, donc qui dira où la frontière passe.
+
 ---
 
 ## T12 — `ir-import-figma`
@@ -115,9 +117,3 @@ Tests L2 sur macOS. L3 par XCTest, hors chemin critique CI mais bloquant avant t
 Plugin Figma qui sérialise l'arbre auto-layout en JSON ; importeur qui consomme ce JSON selon la table spec §11.3. Mode strict et mode `--tolerant`. Tests L1 sur fixtures JSON, sans Figma.
 
 Critère de fin : L1 verte. Avec T8, les deux lois de l'ADR-002 sont démontrées.
-
----
-
-## Questions ouvertes
-
-Les huit de la spec §13 sont tranchées : ADR-003 à ADR-009, sauf la n° 1 (nom et extension du langage), tranchée sans ADR. Une question qui rouvre donne un nouvel ADR, pas une retouche de celui qui la tranchait.

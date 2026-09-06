@@ -5,8 +5,6 @@
  */
 export const SUPPORT_FILE_NAME = "ir-support.tsx";
 
-export const RESET_FILE_NAME = "ir-reset.css";
-
 /**
  * Réinitialisation supposée par la zone générée (spec §9.1), écrite une fois
  * par projet et chargée avant `tokens.css` : le modèle de boîtes de l'IR est
