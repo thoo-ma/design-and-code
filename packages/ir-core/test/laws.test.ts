@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { normalize, parse, print } from "../src/index.js";
 import type { IRError, Screen } from "../src/index.js";
 
-import { genIR, genRawIR } from "./gen.js";
+import { genIR, genRawIR } from "../src/testing/index.js";
 
 const show = (errors: readonly IRError[]): string =>
   errors.map((e) => `${e.code} ${e.path} : ${e.message}`).join("\n");

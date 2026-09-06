@@ -59,14 +59,14 @@ export type IconToken = Token<"icon">;
 // Valeurs (spec §4.1)
 // ---------------------------------------------------------------------------
 
-/** Mode de dimension par axe : `fixed(n)` | `hug` | `fill`. Défaut : `hug`. */
+/** Longueur : littéral ≥ 0 en u, ou `$size.*` (ADR-004). */
+export type Length = number | SizeToken;
+
+/** Mode de dimension par axe : `fixed(longueur)` | `hug` | `fill`. Défaut : `hug`. */
 export type Size =
-  | { readonly kind: "fixed"; readonly value: number }
+  | { readonly kind: "fixed"; readonly value: Length }
   | { readonly kind: "hug" }
   | { readonly kind: "fill" };
-
-/** Longueur pour `minW`/`maxW`/`minH`/`maxH` : littéral en u, ou `$size.*`. */
-export type Length = number | SizeToken;
 
 /** Sémantique du nœud. Défaut : `none`. */
 export type Role =

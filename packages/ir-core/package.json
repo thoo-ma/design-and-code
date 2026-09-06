@@ -5,7 +5,8 @@
   "description": "AST, parse, print, typecheck, forme normale",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -13,6 +14,14 @@
   },
   "dependencies": {
     "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "fast-check": "^4.9.0"
+  },
+  "peerDependenciesMeta": {
+    "fast-check": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "catalog:",

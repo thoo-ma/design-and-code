@@ -40,6 +40,9 @@ export interface Parsed {
   readonly positions: ReadonlyMap<string, Position>;
 }
 
+/** Le breakpoint de base ne se surcharge pas (spec §4.7). */
+const BASE_BREAKPOINT = "compact";
+
 /** Clé de la table des positions : `"/"` pour la racine, puis `"/0/1"`. */
 export function indexPath(indices: readonly number[]): string {
   return "/" + indices.join("/");
@@ -280,6 +283,15 @@ class Parser {
       this.expectPunct("(", path);
       const overrideProps = this.isPunct(")") ? [] : this.props(path);
       this.expectPunct(")", path);
+      if (at.value === BASE_BREAKPOINT) {
+        this.error(
+          "E004",
+          path,
+          `@${at.value} surcharge le breakpoint de base : ses propriétés sont celles de base (spec §4.7). Les y déplacer.`,
+          at.pos,
+        );
+        continue;
+      }
       overrides.push({
         breakpoint: at.value,
         props: overrideProps,

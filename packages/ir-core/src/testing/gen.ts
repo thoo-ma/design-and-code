@@ -1,6 +1,6 @@
 import * as fc from "fast-check";
 
-import { normalize } from "../src/index.js";
+import { normalize } from "../normalize.js";
 
 import type {
   BoxNode,
@@ -16,7 +16,7 @@ import type {
   TextNode,
   Token,
   TokenGroup,
-} from "../src/index.js";
+} from "../ast.js";
 
 /**
  * Générateur `genIR` (spec §8.1) : arbres bien typés, profondeur ≤ 5,
@@ -74,15 +74,15 @@ const genLiteralLength = fc.oneof(
   fc.double({ min: 0, max: 2000, noNaN: true, noDefaultInfinity: true }),
 );
 
-export const genSize: fc.Arbitrary<Size> = fc.oneof(
-  fc.constant({ kind: "hug" } as const),
-  fc.constant({ kind: "fill" } as const),
-  genLiteralLength.map((value) => ({ kind: "fixed", value }) as const),
-);
-
 export const genLength: fc.Arbitrary<Length> = fc.oneof(
   genLiteralLength,
   genToken("size"),
+);
+
+export const genSize: fc.Arbitrary<Size> = fc.oneof(
+  fc.constant({ kind: "hug" } as const),
+  fc.constant({ kind: "fill" } as const),
+  genLength.map((value) => ({ kind: "fixed", value }) as const),
 );
 
 export const genRole: fc.Arbitrary<Role> = fc.oneof(

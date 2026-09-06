@@ -38,11 +38,11 @@ export function print(screen: Screen): string {
 
 const token = (t: Token): string => `$${t.group}.${t.path.join(".")}`;
 
-const size = (s: Size): string =>
-  s.kind === "fixed" ? `fixed(${String(s.value)})` : s.kind;
-
 const length = (l: Length): string =>
   typeof l === "number" ? String(l) : token(l);
+
+const size = (s: Size): string =>
+  s.kind === "fixed" ? `fixed(${length(s.value)})` : s.kind;
 
 const role = (r: Role): string =>
   r.kind === "heading" ? `heading(${String(r.level)})` : r.kind;

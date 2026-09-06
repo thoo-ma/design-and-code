@@ -57,15 +57,15 @@ export const ShadowTokenSchema = token("shadow");
 export const OpacityTokenSchema = token("opacity");
 export const IconTokenSchema = token("icon");
 
-export const SizeSchema: z.ZodType<Size> = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("fixed"), value: z.number() }),
-  z.strictObject({ kind: z.literal("hug") }),
-  z.strictObject({ kind: z.literal("fill") }),
+export const LengthSchema: z.ZodType<Length> = z.union([
+  z.number().nonnegative(),
+  SizeTokenSchema,
 ]);
 
-export const LengthSchema: z.ZodType<Length> = z.union([
-  z.number(),
-  SizeTokenSchema,
+export const SizeSchema: z.ZodType<Size> = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("fixed"), value: LengthSchema }),
+  z.strictObject({ kind: z.literal("hug") }),
+  z.strictObject({ kind: z.literal("fill") }),
 ]);
 
 export const RoleSchema: z.ZodType<Role> = z.discriminatedUnion("kind", [

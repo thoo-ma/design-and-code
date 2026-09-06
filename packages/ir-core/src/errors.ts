@@ -16,6 +16,7 @@ export const ERROR_CODES = [
   "E007",
   "E008",
   "E009",
+  "E010",
 ] as const;
 
 export const WARNING_CODES = ["W001", "W002", "W003"] as const;
@@ -27,7 +28,8 @@ export type DiagnosticCode = ErrorCode | WarningCode;
 export type Severity = "error" | "warning";
 
 /** Étape qui peut émettre le diagnostic (colonne « Où » de la spec §12). */
-export type Stage = "parse" | "import" | "typecheck" | "layout" | "normalize";
+export type Stage =
+  "parse" | "import" | "typecheck" | "layout" | "normalize" | "compile";
 
 export interface DiagnosticSpec {
   readonly severity: Severity;
@@ -45,8 +47,9 @@ export const DIAGNOSTICS: Readonly<Record<DiagnosticCode, DiagnosticSpec>> = {
   },
   E002: {
     severity: "error",
-    summary: "Token inconnu dans le design system",
-    stages: ["typecheck"],
+    summary:
+      "Token, icône ou breakpoint inconnu dans le design system, token non référençable, ou type DTCG inattendu pour le groupe",
+    stages: ["typecheck", "compile"],
   },
   E003: {
     severity: "error",
@@ -84,6 +87,12 @@ export const DIAGNOSTICS: Readonly<Record<DiagnosticCode, DiagnosticSpec>> = {
     summary:
       "Erreur de syntaxe (lexème inattendu, fin de fichier prématurée, type de nœud inconnu)",
     stages: ["parse"],
+  },
+  E010: {
+    severity: "error",
+    summary:
+      "Design system invalide (fichier mal formé, alias vers un token inexistant, alias cyclique)",
+    stages: ["typecheck"],
   },
   W001: {
     severity: "warning",
