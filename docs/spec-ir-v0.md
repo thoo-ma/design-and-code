@@ -213,64 +213,98 @@ Contraintes descendantes, tailles remontantes. Chaque nœud reçoit de son paren
 
 ### 5.2 Algorithme
 
+Notation. Une contrainte est un nombre ou ∞, avec `min(a, ∞) = a`. Les propriétés d'un nœud sont d'abord résolues pour le breakpoint actif (§4.7 : le breakpoint de plus grand seuil inférieur ou égal à la largeur du viewport), défauts de §4 appliqués, tokens `$space.*` et `$size.*` résolus en nombres par le design system. `available(nœud, axe, max)` est l'espace proposé borné par le nœud lui-même : `min(max, nœud.max<axe>)`. La géométrie produite est l'ensemble des rectangles `(x, y, w, h)` par identifiant de nœud, dans le repère de l'écran, origine en haut à gauche, racine en `(0, 0)`, sans arrondi.
+
 ```
 measure(node, maxW, maxH) -> (w, h)
 
   si node est Icon :
-     retourner (size, size)
+     retourner (size, size)                 -- jamais contraint ni étiré (§4.6)
 
   si node est Text :
+     texte = littéral, ou valeur d'exemple du slot (§5.3), ou chaîne vide
      largeur disponible = selon mode w :
-        fixed(n) -> n ; fill -> maxW ; hug -> maxW (mesure en une ligne si maxW = ∞)
-     (tw, th) = platform.measureText(contenu, style, largeur disponible, maxLines)
+        fixed(n) -> n ; fill -> available(w, maxW) ; hug -> available(w, maxW)
+        (mesure en une ligne si la largeur disponible est ∞)
+     (tw, th) = platform.measureText(texte, style, largeur disponible, maxLines)
      w = selon mode w : fixed(n) -> n ; fill -> maxW ; hug -> tw
      h = selon mode h : fixed(n) -> n ; fill -> maxH ; hug -> th
-     appliquer min/max ; retourner (w, h)
+        (une feuille fill ne reçoit jamais ∞ en forme normale : son parent lui donne une
+        part finie sur main, et la mesure comme hug puis la remesure de l'étape 6 sur cross)
+     borner par min/max ; retourner (w, h)
 
   si node est Image ou Box :
-     intrinsèque = (asset ou ratio) pour Image, (0, 0) pour Box
+     intrinsèque = (0, 0)                   -- l'asset n'est pas connu du layout de référence
      w = selon mode w : fixed(n) -> n ; fill -> maxW ; hug -> intrinsèque.w
      h = selon mode h : fixed(n) -> n ; fill -> maxH ; hug -> intrinsèque.h
-     si un seul axe est résolu et ratio existe : dériver l'autre
-     appliquer min/max ; retourner (w, h)
+     si un seul axe est résolu (fixed ou fill) et ratio existe : dériver l'autre
+     borner par min/max ; retourner (w, h)
 
   si node est Stack :
      (main, cross) = axes selon dir
-     innerMax = max - padding sur chaque axe
+     max = (available(w, maxW), available(h, maxH))
+        -- les min/max du Stack bornent d'abord l'espace proposé aux enfants, puis sa taille
+     innerMax = max(0, max - padding) sur chaque axe   -- jamais négatif, comme une boîte CSS
+     si overflow: scroll : innerMax.main = ∞      -- l'axe de défilement propose l'infini (ADR-008)
      disponibleMain = innerMax.main - gap * (nbEnfants - 1)
+
+     Aux étapes 1 à 3, un enfant fill sur cross est mesuré comme hug sur cross :
+     sa taille sur cross est provisoire et sera fixée à l'étape 6.
 
      1. enfants fixed sur main : mesurer avec (fixed, innerMax.cross) ; somme -> S_fixed
      2. enfants hug sur main : mesurer avec (∞ sur main, innerMax.cross) ; somme -> S_hug
+        (un enfant hug reçoit la contrainte du Stack sur cross, finie ou non ;
+        c'est ce qui fait qu'un texte se replie à la largeur de son parent)
      3. reste = max(0, disponibleMain - S_fixed - S_hug)
-        enfants fill sur main : part = reste / nbFill ; mesurer avec (part, innerMax.cross)
+        si reste = ∞ et nbFill > 0 : E007 si l'infini vient de overflow: scroll (ADR-008) ;
+        sinon il est transitoire (mesure provisoire d'un ancêtre étiré, remesuré à l'étape 6
+        avec une contrainte finie) et reste = 0 en attendant, comme flexbox avec une taille
+        indéfinie
+        enfants fill sur main : part = reste / nbFill ; mesurer avec (part, innerMax.cross).
+        Si un enfant fill est borné par son min/max sur main, sa taille est gelée à la borne,
+        retirée du reste, et les parts des autres sont recalculées, jusqu'à ce que plus aucun
+        ne soit borné (au plus nbFill tours, comme flexbox). Somme -> S_fill
      4. taille main du Stack :
         fixed(n) -> n
         hug      -> S_fixed + S_hug + S_fill + gaps + padding
-        fill     -> max.main   (erreur E007 si max.main = ∞)
+        fill     -> max.main   (fini en forme normale, voir l'étape 3 ; E007 sinon)
      5. taille cross du Stack :
         fixed(n) -> n
-        hug      -> max des tailles cross des enfants non-fill + padding
-        fill     -> max.cross  (erreur E007 si max.cross = ∞)
-     6. enfants fill sur cross, ou hug avec crossAlign: stretch :
-        re-mesurer avec cross = innerCross du Stack
-     appliquer min/max ; retourner (w, h)
+        hug      -> max des tailles cross de tous les enfants (provisoires pour les fill) + padding
+        fill     -> max.cross  (fini en forme normale ; E007 sinon)
+     borner par min/max
+     6. enfants fill sur cross, ou hug sur cross si crossAlign: stretch :
+        re-mesurer comme fill sur cross, avec cross = innerCross du Stack et la même
+        contrainte main qu'avant ; un enfant fixed sur cross n'est jamais étiré, une Icon non plus
+     retourner (w, h)
 
 arrange(node, x, y) :
-  Stack : placer les enfants le long de main selon mainAlign
-     (start | center | end | between répartissent l'espace libre),
-     le long de cross selon crossAlign, puis récurser.
-  feuilles : position donnée.
+  Stack :
+     libre = taille.main - padding.main - (S_fixed + S_hug + S_fill + gaps)
+     start   : les enfants commencent à padding.start
+     center  : décalés de libre / 2 ; end : décalés de libre
+        (aussi quand libre < 0 : le contenu déborde des deux côtés ou au début, comme CSS)
+     between : libre réparti en nbEnfants - 1 intervalles ajoutés au gap ;
+        start si un seul enfant ou si libre < 0
+     sur cross, chaque enfant selon crossAlign : start | center | end dans innerCross = max(0, taille.cross - padding.cross) ;
+        stretch : déjà dimensionné à l'étape 6, placé à padding.start
+     un Stack scroll place son contenu à partir de padding.start, sans décalage de
+        défilement ; le contenu peut déborder de sa taille
+     puis récurser
+  feuilles : position donnée
 ```
 
 Deux remarques d'implémentation :
-- Le passage 6 est la seule remesure ; elle est bornée (une fois) et ne fait pas de point fixe. C'est ce qui garantit la terminaison en O(n) et la prévisibilité.
-- Un enfant `fill` sur un axe où son parent est `hug` est éliminé par la forme normale (§6, règle 1), sauf si le parent est étiré sur cet axe par son propre parent. L'algorithme rencontre alors ce `fill` avec une contrainte finie sur l'axe (celle de l'axe secondaire du grand-parent à l'étape 2, confirmée par la remesure de l'étape 6) et le remplit : c'est le résultat attendu, `#primary` dans `#actions` en §10.
+- Le passage 6 est la seule remesure ; elle est bornée (une fois par enfant) et ne fait pas de point fixe. Le gel de l'étape 3 est borné par le nombre d'enfants fill. C'est ce qui garantit la terminaison en O(n) et la prévisibilité.
+- Un enfant `fill` sur un axe où son parent est `hug` est éliminé par la forme normale (§6, règle 1), sauf si le parent est étiré sur cet axe par son propre parent. L'algorithme rencontre alors ce `fill` avec une contrainte finie sur l'axe (celle de l'axe secondaire du grand-parent à l'étape 2, puis celle de la remesure de l'étape 6) et le remplit : c'est le résultat attendu, `#primary` dans `#actions` en §10.
 
 ### 5.3 Mesure de texte
 
 `platform.measureText` est un paramètre de l'algorithme, pas une partie de la spec. Le layout de référence est donc paramétré par une fonction de mesure ; les lois de géométrie (loi 3) sont énoncées à mesure fixée. C'est la formulation honnête de « pas de fidélité pixel entre plateformes » (ADR-001) : la géométrie est identique à mesure égale, et les mesures diffèrent entre plateformes.
 
-Pour les tests, une mesure déterministe de référence est fournie (police monospace fictive, largeur par caractère fixe), qui rend les tests reproductibles sans navigateur ni simulateur.
+Le texte d'un `slot` est la valeur d'exemple fournie au layout, la même que celle des stories et des `#Preview` (§9.3) ; sans valeur, la chaîne vide.
+
+Pour les tests, une mesure déterministe de référence est fournie, qui rend les tests reproductibles sans navigateur ni simulateur : police monospace fictive, largeur de caractère `0,6 × fontSize + letterSpacing`, hauteur de ligne `fontSize × lineHeight`, repli aux espaces, un mot plus long que la largeur disponible occupe sa ligne et déborde, au plus `maxLines` lignes, texte vide de hauteur nulle.
 
 ---
 
@@ -403,7 +437,7 @@ screen Login {
       color: $color.text.secondary,
       maxLines: 2
     ) slot(subtitle)
-    Stack #form (dir: v, gap: $space.sm) {
+    Stack #form (dir: v, gap: $space.sm, crossAlign: stretch) {
       Box #email (
         h: fixed(48),
         bg: $color.bg.field,
@@ -447,7 +481,7 @@ screen Login {
 }
 ```
 
-Note : `#email` et `#password` sont des `Box` avec `role: textfield` parce que les composants sont hors scope v0. Quand la couche composants arrivera, ces deux nœuds deviendront `Field(variant: outlined)` et le reste de l'écran ne changera pas. C'est le test de la restriction « le layout d'abord » : elle ne doit pas coûter de réécriture plus tard.
+Note : `#form` porte `crossAlign: stretch` parce que ses champs, des `Box` sans contenu, sont `hug` en largeur et auraient sinon une largeur nulle ; c'est le calcul de la géométrie de référence qui l'a révélé. `#email` et `#password` sont des `Box` avec `role: textfield` parce que les composants sont hors scope v0. Quand la couche composants arrivera, ces deux nœuds deviendront `Field(variant: outlined)` et le reste de l'écran ne changera pas. C'est le test de la restriction « le layout d'abord » : elle ne doit pas coûter de réécriture plus tard.
 
 ### 10.2 Sortie CSS (extrait)
 
@@ -462,7 +496,7 @@ Note : `#email` et `#password` sont des `Box` avec `role: textfield` parce que l
 @media (min-width: 600px) {
   .root { padding: var(--space-xl); max-width: 480px; }
 }
-.form { display: flex; flex-direction: column; gap: var(--space-sm); }
+.form { display: flex; flex-direction: column; gap: var(--space-sm); align-items: stretch; }
 .email {
   height: 48px;
   background: var(--color-bg-field); border-radius: var(--radius-md);
@@ -678,7 +712,7 @@ Le mode tolérant (`--tolerant`) arrondit les valeurs numériques au token le pl
 | E004 | erreur | Propriété invalide pour ce type de nœud | parse |
 | E005 | erreur | Identifiant dupliqué | parse |
 | E006 | erreur | Image sans dimension résolvable | typecheck |
-| E007 | erreur | `fill` sous une contrainte infinie (Stack `scroll` sur le même axe, ou racine sans viewport) | layout |
+| E007 | erreur | `fill` sous une contrainte infinie : enfant `fill` sur l'axe de défilement d'un Stack `scroll` (ADR-008), ou `fill` sans viewport | typecheck, layout |
 | E008 | erreur | Frames de breakpoints structurellement différentes | import |
 | E009 | erreur | Erreur de syntaxe (lexème inattendu, fin de fichier prématurée, type de nœud inconnu) | parse |
 | E010 | erreur | Design system invalide (fichier mal formé, alias vers un token inexistant, alias cyclique) | typecheck |

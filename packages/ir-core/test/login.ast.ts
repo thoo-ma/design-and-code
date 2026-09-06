@@ -54,7 +54,11 @@ export const loginAst: Screen = {
       {
         type: "Stack",
         id: "form",
-        props: { dir: "v", gap: { group: "space", path: ["sm"] } },
+        props: {
+          dir: "v",
+          gap: { group: "space", path: ["sm"] },
+          crossAlign: "stretch",
+        },
         overrides: [],
         children: [
           {

@@ -1,3 +1,4 @@
-// T0 : module vide, aucun comportement. `export {}` suffit à en faire un
-// module ES (requis par isolatedModules / verbatimModuleSyntax).
-export {};
+// ir-layout-ref : sémantique de référence du layout (spec §5, T6).
+export * from "./types.js";
+export * from "./measure-text.js";
+export * from "./layout.js";

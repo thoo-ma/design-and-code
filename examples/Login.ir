@@ -19,7 +19,7 @@ screen Login {
       color: $color.text.secondary,
       maxLines: 2
     ) slot(subtitle)
-    Stack #form (dir: v, gap: $space.sm) {
+    Stack #form (dir: v, gap: $space.sm, crossAlign: stretch) {
       Box #email (
         h: fixed(48),
         bg: $color.bg.field,
