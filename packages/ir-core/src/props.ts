@@ -96,7 +96,8 @@ export const PROP_SPECS: Readonly<Record<NodeType, readonly PropSpec[]>> = {
     ...semantics,
   ],
   Icon: [
-    prop("name", convToken("icon"), { required: true }),
+    // Le contenu de l'Icon : requis, jamais surchargé (§4.6, §4.7).
+    prop("name", convToken("icon"), { required: true, overridable: false }),
     prop("size", convToken("size"), { required: true }),
     prop("color", convToken("color"), { required: true }),
     ...semantics,

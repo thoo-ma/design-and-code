@@ -39,6 +39,7 @@ export function normalize(screen: Screen): Normalized {
   let root = rule1(screen.root, undefined, undefined, [], "", warnings);
   root = mapTree(root, (node) => rule2(node));
   root = mapTree(root, (node, path) => rule3(node, path, warnings));
+  root = mapTree(root, (node, path) => rule4(node, path, warnings));
   root = mapTree(root, (node) => rule5(node));
   root = rule6(root);
   root = mapTree(root, (node) => rule7(node));
@@ -177,6 +178,8 @@ function resolve(eff: Props, key: string): unknown {
   // truncate n'a d'effet qu'avec maxLines (§4.4) : sans lui, il se résout à none.
   if (key === "truncate")
     return eff["maxLines"] === undefined ? "none" : (v ?? "end");
+  // Un label vide n'est pas un nom accessible (§6, règle 2).
+  if (key === "label") return v === "" ? undefined : v;
   if (v !== undefined) return v;
   return DEFAULTS[key];
 }
@@ -379,6 +382,54 @@ function rule3(node: Node, path: string, warnings: IRError[]): Node {
     }
   }
   return withProps(node, props, kept);
+}
+
+// ---------------------------------------------------------------------------
+// Règle 4 — truncate écrit là où maxLines est résolu
+// ---------------------------------------------------------------------------
+
+/**
+ * La valeur sémantique de `truncate` à un breakpoint : `end` ou `none` si
+ * `maxLines` y est résolu, sans quoi elle n'existe pas (§4.4). La base porte
+ * `none` quand c'est sa valeur ; une surcharge porte la sienne quand elle
+ * diffère de ce que la base lui donne. Les règles 2 et 3 ont déjà retiré les
+ * `truncate` redondants ; celle-ci déplace ceux qui sont au mauvais endroit.
+ */
+function rule4(node: Node, path: string, warnings: IRError[]): Node {
+  if (node.type !== "Text") return node;
+  const props = propsOf(node.props);
+  const overrides = overridesOf(node);
+  const semantic = (bp: string): unknown => {
+    const eff = effective(props, overrides, bp);
+    return eff["maxLines"] === undefined
+      ? undefined
+      : (eff["truncate"] ?? "end");
+  };
+  const base = without(props, "truncate");
+  const nextProps =
+    semantic(BASE) === "none" ? { ...base, truncate: "none" } : base;
+  const fromBase = nextProps["truncate"] ?? "end";
+  const kept: GenericOverride[] = [];
+  for (const o of overrides) {
+    const value = semantic(o.breakpoint);
+    const rest = without(o.props, "truncate");
+    const next =
+      value !== undefined && value !== fromBase
+        ? { ...rest, truncate: value }
+        : rest;
+    if (Object.keys(next).length === 0) {
+      warnings.push(
+        irError(
+          "W003",
+          path,
+          `@${o.breakpoint} ne change rien par rapport à la base, supprimée.`,
+        ),
+      );
+    } else {
+      kept.push({ breakpoint: o.breakpoint, props: next });
+    }
+  }
+  return withProps(node, nextProps, kept);
 }
 
 // ---------------------------------------------------------------------------

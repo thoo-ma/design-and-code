@@ -18,6 +18,7 @@ import type {
 import { BASE_BREAKPOINT, EXPECTED_TYPE } from "../design-system.js";
 import type { DesignSystem } from "../design-system.js";
 import { normalize } from "../normalize.js";
+import { RESERVED_SLOT_NAMES } from "../slots.js";
 
 import { fixtureDesignSystem } from "./fixture.js";
 
@@ -83,6 +84,10 @@ export function generatorsFor(ds: DesignSystem): Generators {
 
   /** IDENT de la spec §3.1, restreint pour rester lisible dans les contre-exemples. */
   const genIdent = fc.stringMatching(/^[a-z][a-zA-Z0-9_-]{0,7}$/);
+  /** Nom de slot (§9.3) : identifiant sans tiret, hors mots réservés des cibles. */
+  const genSlotName = fc
+    .stringMatching(/^[a-z][a-zA-Z0-9_]{0,7}$/)
+    .filter((name) => !RESERVED_SLOT_NAMES.has(name));
   const genText = fc.string({ unit: "grapheme", maxLength: 40 });
 
   const genLiteralLength = fc.oneof(
@@ -117,12 +122,12 @@ export function generatorsFor(ds: DesignSystem): Generators {
 
   const genContent: fc.Arbitrary<Content> = fc.oneof(
     genText.map((value) => ({ kind: "literal", value }) as const),
-    genIdent.map((name) => ({ kind: "slot", name }) as const),
+    genSlotName.map((name) => ({ kind: "slot", name }) as const),
   );
   /** Slots d'Image en majuscule initiale : jamais le nom d'un slot de Text (§9.3). */
   const genImageContent: fc.Arbitrary<Content> = fc.oneof(
     genText.map((value) => ({ kind: "literal", value }) as const),
-    genIdent.map((name) => ({ kind: "slot", name: `I${name}` }) as const),
+    genSlotName.map((name) => ({ kind: "slot", name: `I${name}` }) as const),
   );
 
   const genPad = fc.oneof(
@@ -266,7 +271,11 @@ export function generatorsFor(ds: DesignSystem): Generators {
     { ...semantics, ...iconStyle },
     { ...REC, requiredKeys: ["name", "size", "color"] },
   );
-  const genIconOverride = fc.record(iconStyle, { ...REC, requiredKeys: [] });
+  // `name` est le contenu de l'Icon : jamais surchargé (§4.6).
+  const genIconOverride = fc.record(
+    { size: iconStyle.size, color: iconStyle.color },
+    { ...REC, requiredKeys: [] },
+  );
 
   /** Au plus une surcharge par breakpoint non-base du design system. */
   const genOverrides = <P>(

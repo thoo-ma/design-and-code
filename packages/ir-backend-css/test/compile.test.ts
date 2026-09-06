@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import * as fc from "fast-check";
 import { normalize, parse, typecheck } from "ir-core";
 import type { Content, Node, Screen, StackProps } from "ir-core";
-import { fixtureDesignSystem, genIR } from "ir-core/testing";
+import { fixtureDesignSystem, genIR, genRawIR } from "ir-core/testing";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -13,6 +13,7 @@ import {
   componentName,
   diffDeclarations,
   jsxText,
+  parseCssModule,
 } from "../src/index.js";
 import type { CssOutput } from "../src/index.js";
 
@@ -58,6 +59,8 @@ const text = (id: string, content: Content, extra: object = {}): Node => ({
   content,
 });
 const screen = (root: Node, name = "S"): Screen => ({ name, root });
+const fill = { kind: "fill" } as const;
+const fixed = (n: number) => ({ kind: "fixed", value: n }) as const;
 const cssRule = (css: string, id: string): string => {
   const m = new RegExp(`^\\.${id} \\{\\n([\\s\\S]*?)\\n\\}`, "m").exec(css);
   return m?.[1] ?? "";
@@ -101,9 +104,6 @@ describe("golden : Login (spec §10.2, §9.1)", () => {
 });
 
 describe("table §11.1 : dimensions", () => {
-  const fill = { kind: "fill" } as const;
-  const fixed = (n: number) => ({ kind: "fixed", value: n }) as const;
-
   it("racine : 100 %, fit-content ou px, toujours émis", () => {
     expect(
       cssRule(compile(screen(stack("root", { dir: "v" }))).css, "root"),
@@ -428,6 +428,105 @@ describe("table §11.1 : Stack, style, Text, Image, Icon", () => {
       expect(r2.errors.map((e) => `${e.code} ${e.path}`)).toStrictEqual([
         "E004 root/img",
       ]);
+  });
+});
+
+describe("invariants pour la loi 2 (spec §11.1, T8)", () => {
+  it("fill sur l'axe principal avec minW : la contrainte remplace le min-width: 0", () => {
+    const css = compile(
+      screen(
+        stack("root", { dir: "h", w: fill, h: fill }, [
+          box("a", { w: fill, minW: 5 }),
+          box("b", { w: fill, minW: 0 }),
+          box("c", { w: fill }),
+        ]),
+      ),
+    ).css;
+    expect(cssRule(css, "a")).toBe("  flex: 1 1 0;\n  min-width: 5px;");
+    expect(cssRule(css, "b")).toBe("  flex: 1 1 0;\n  min-width: 0px;");
+    expect(cssRule(css, "c")).toBe("  flex: 1 1 0;\n  min-width: 0;");
+  });
+
+  it("maxH avec maxLines et truncate none : un seul max-height, par min()", () => {
+    const css = compile(
+      screen(
+        stack("root", { dir: "v" }, [
+          text(
+            "a",
+            { kind: "literal", value: "x" },
+            { maxLines: 3, truncate: "none", maxH: 40 },
+          ),
+        ]),
+      ),
+    ).css;
+    expect(cssRule(css, "a")).toBe(
+      "  composes: type-body-md from global;\n  flex: 0 0 auto;\n  color: var(--color-text-primary);\n  overflow: hidden;\n  max-height: min(40px, calc(3 * 1.5em));",
+    );
+  });
+
+  it("heading sur un nœud autre qu'un Text : role et aria-level", () => {
+    const tsx = compile(
+      screen(
+        stack("root", { dir: "v" }, [
+          box("a", { role: { kind: "heading", level: 2 } }),
+        ]),
+      ),
+    ).tsx;
+    expect(tsx).toContain(
+      `<div className={s.a} data-ir="a" role="heading" aria-level="2" />`,
+    );
+  });
+
+  it("Image à slot : le label est le repli de alt", () => {
+    const img: Node = {
+      type: "Image",
+      id: "photo",
+      props: { w: fill, h: fixed(100), label: "Photo" },
+      overrides: [],
+      content: { kind: "slot", name: "photo" },
+    };
+    expect(
+      compile(screen(stack("root", { dir: "v", w: fill }, [img]))).tsx,
+    ).toContain(`src={photo.src} alt={photo.alt ?? "Photo"}`);
+  });
+
+  it("E004 : nom de slot réservé par la cible", () => {
+    for (const name of ["default", "s", "Icon"]) {
+      const r = compileCss(
+        screen(
+          stack("root", { dir: "v" }, [text("t", { kind: "slot", name })]),
+        ),
+        { designSystem: ds },
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok)
+        expect(r.errors.map((e) => `${e.code} ${e.path}`)).toStrictEqual([
+          "E004 root/t",
+        ]);
+    }
+  });
+
+  it("le compilateur normalise son entrée et rend les avertissements de N", () => {
+    const raw = screen(
+      stack("root", { dir: "v", crossAlign: "start" }, [
+        box("a", { w: fill, label: "" }),
+      ]),
+    );
+    const out = compile(raw);
+    expect(out.warnings.map((w) => w.code)).toStrictEqual(["W001"]);
+    expect(cssRule(out.css, "a")).toBe("  flex: 0 0 auto;");
+    expect(out.tsx).toContain(`<div className={s.a} data-ir="a" />`);
+    expect(compile(normalize(raw).screen).css).toBe(out.css);
+  });
+
+  it("aucune propriété n'apparaît deux fois dans une règle, sur 300 IR quelconques", () => {
+    fc.assert(
+      fc.property(genRawIR, (raw: Screen) => {
+        const r = parseCssModule(compile(raw).css);
+        expect(r.ok, r.ok ? "" : JSON.stringify(r.errors)).toBe(true);
+      }),
+      { numRuns: 300 },
+    );
   });
 });
 

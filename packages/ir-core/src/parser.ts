@@ -271,6 +271,14 @@ class Parser {
       this.next();
       this.expectPunct("(", path);
       const slot = this.expectIdent("Le nom du slot", path);
+      if (slot.value.includes("-")) {
+        this.error(
+          "E004",
+          path,
+          `Le nom de slot « ${slot.value} » contient un tiret : un slot devient un paramètre dans chaque cible (spec §9.3). N'utiliser que des lettres, des chiffres et _.`,
+          slot.pos,
+        );
+      }
       this.expectPunct(")", path);
       content = { value: { kind: "slot", name: slot.value }, pos: c.pos };
     }

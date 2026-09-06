@@ -93,6 +93,7 @@ Contraintes hors grammaire :
 - `content` est requis sur `Text` et `Image`, interdit ailleurs.
 - Les `override` référencent un breakpoint connu du design system ; un nœud en porte au plus un par breakpoint.
 - Les `id` sont uniques dans le document.
+- Un nom de slot ne contient pas de tiret : il devient un paramètre dans chaque cible (§9.3). E004.
 
 ### 3.2 Exemple minimal
 
@@ -193,11 +194,11 @@ Contenu : littéral (URL ou nom d'asset de placeholder) ou `slot(nom)`. Taille i
 | `size` | `$size.*` | requis |
 | `color` | `$color.*` | requis |
 
-`w` et `h` sont implicitement `fixed(size)` ; ni eux ni les contraintes `minW`, `maxW`, `minH`, `maxH` ne peuvent être exprimés sur une `Icon` (§5.2 retourne `(size, size)` sans contrainte). `role` et `label` restent disponibles.
+`w` et `h` sont implicitement `fixed(size)` ; ni eux ni les contraintes `minW`, `maxW`, `minH`, `maxH` ne peuvent être exprimés sur une `Icon` (§5.2 retourne `(size, size)` sans contrainte). `role` et `label` restent disponibles. `name` est le contenu de l'`Icon`, comme le texte d'un `Text` : il n'est pas surchargeable par breakpoint (§4.7).
 
 ### 4.7 Breakpoints et surcharges
 
-Un `override` `@expanded(...)` remplace, pour ce breakpoint, les propriétés listées. Seules les propriétés de layout et de style sont surchargeables ; `role`, `label`, le contenu et les enfants ne le sont pas. Un écran est donc un seul arbre, jamais deux arbres par breakpoint : la structure est invariante, seules les propriétés varient. C'est une restriction délibérée de la v0, qui garantit que les lois portent sur un objet unique.
+Un `override` `@expanded(...)` remplace, pour ce breakpoint, les propriétés listées. Seules les propriétés de layout et de style sont surchargeables ; `role`, `label`, le contenu (texte, image, `name` d'une `Icon`) et les enfants ne le sont pas. Un écran est donc un seul arbre, jamais deux arbres par breakpoint : la structure est invariante, seules les propriétés varient. C'est une restriction délibérée de la v0, qui garantit que les lois portent sur un objet unique.
 
 Le breakpoint de base (sans `@`) est `compact`. Un nœud sans surcharge a les mêmes propriétés partout. Surcharger le breakpoint de base (`@compact(...)`) est une erreur E004 : ses propriétés sont celles de base. Un breakpoint absent du design system (`$bp.*`) est une erreur E002 au typecheck.
 
@@ -315,9 +316,9 @@ Toute comparaison d'IR (dans les lois, dans les tests, dans les diffs) se fait s
 Règles, appliquées dans cet ordre :
 
 1. **Élimination de fill-in-hug.** Un enfant `fill` sur un axe où son parent Stack est `hug` sur le même axe devient `hug`, sauf si ce parent est lui-même étiré sur cet axe par son propre parent (`crossAlign: stretch` du grand-parent, l'axe étant l'axe secondaire du grand-parent) : un Stack étiré dispose de l'espace et ses enfants `fill` le remplissent, c'est le cas de `#primary` dans `#actions` en §10. La règle s'évalue breakpoint par breakpoint sur les propriétés résolues (base plus surcharge), et le résultat est réencodé en base plus surcharges. Chaque changement produit un avertissement W001. (Figma applique la même règle silencieusement.)
-2. **Élimination des défauts.** Toute propriété de base égale à sa valeur par défaut est omise. L'égalité est sémantique : `pad: ($space.none, $space.none)` vaut le défaut. Une propriété n'est omise que si sa résolution (défauts de §4 compris, dont celui de `truncate`) est la même à chaque breakpoint avec et sans elle.
+2. **Élimination des défauts.** Toute propriété de base égale à sa valeur par défaut est omise. L'égalité est sémantique : `pad: ($space.none, $space.none)` vaut le défaut, et `label: ""` vaut l'absence de label (un nom accessible vide n'en est pas un ; ARIA l'ignore, et le code généré ne distingue pas les deux). Une propriété n'est omise que si sa résolution (défauts de §4 compris, dont celui de `truncate`) est la même à chaque breakpoint avec et sans elle.
 3. **Élimination des surcharges vides.** Une propriété de surcharge dont la résolution au breakpoint est la même avec et sans elle est omise. Un `@bp(...)` devenu vide est supprimé, avec un avertissement W003.
-4. **Résolution de `truncate`.** `truncate` se résout à `none` sans `maxLines` (sans effet), et à sa valeur, `end` par défaut, avec `maxLines` (§4.4). Par la règle 2 : `truncate: end` est omis si `maxLines` est présent ; sans `maxLines`, `truncate` est omis quelle que soit sa valeur, sauf si une surcharge ajoute `maxLines`, auquel cas `none` porte un sens à ce breakpoint et reste.
+4. **Résolution de `truncate`.** `truncate` n'a de sens qu'aux breakpoints où `maxLines` est résolu (§4.4), et y vaut `end` par défaut. `N` l'écrit là où il agit : la base porte `truncate: none` si et seulement si `maxLines` y est résolu et que la valeur y est `none` ; une surcharge porte `truncate` si et seulement si `maxLines` y est résolu et que la valeur y diffère de celle que la base lui donne (`end` si la base n'en porte pas). Partout ailleurs `truncate` est omis. Un `truncate: none` écrit à la base sans `maxLines`, pour une surcharge qui ajoute `maxLines`, est donc déplacé dans cette surcharge : deux IR de même sens ont une seule forme normale, ce que la loi 2 exige d'un décompilateur qui ne voit que des valeurs résolues.
 5. **Ordre canonique des propriétés.** L'ordre est celui des tables de §4, `w`/`h` d'abord, puis contraintes, puis propriétés du type, puis style, puis `role`/`label`.
 6. **Identifiants.** Un nœud sans `#id` reçoit `#n_<hash>`, où le hash est FNV-1a 32 bits, sur huit chiffres hexadécimaux, de la chaîne `type:i1/i2/…` formée de son type et de son chemin d'indices depuis la racine (chemin vide pour la racine, donc `Stack:`). Déterministe, donc stable tant que la structure ne change pas. Si l'identifiant obtenu existe déjà dans le document, le chemin d'indices lui est ajouté en suffixe (`_i1_i2`), autant de fois que nécessaire.
 7. **Padding.** `pad: ($a, $b, $a, $b)` devient `pad: ($a, $b)`, puis `pad: ($a, $a)` devient `pad: $a`. Deux tokens sont égaux s'ils ont le même groupe et le même chemin.
@@ -340,7 +341,7 @@ Notation : `ir` désigne un document en forme normale. `≡` est l'égalité str
 
 **Loi 3 — Géométrie.** Pour tout backend B, tout viewport V et une mesure de texte M fixée : `geometry_B(compile_B(ir), V, M) ≈ geometry_ref(ir, V, M)`, où `≈` est l'égalité à 1 u près sur chaque coordonnée. C'est la loi qui dit que le compilateur est correct, pas seulement réversible.
 
-**Loi 4 — Normalisation.** `N(N(ir)) ≡ N(ir)` et, pour toute opération O parmi import, export, compile, decompile : `N(O(ir)) ≡ O(N(ir))`. Les outils commutent avec la forme normale.
+**Loi 4 — Normalisation.** `N(N(ir)) ≡ N(ir)` et, pour toute opération O parmi import, export, compile, decompile : `N(O(ir)) ≡ O(N(ir))`. Les outils commutent avec la forme normale. Pour `compile`, dont la sortie n'est pas une IR, la commutation se lit `compile_B(ir) = compile_B(N(ir))` : un compilateur normalise son entrée (il a besoin des identifiants de la règle 6 de §6) et deux IR de même forme normale donnent le même code, à l'octet près. Pour `decompile`, elle se lit `N(decompile_B(c)) ≡ decompile_B(c)` : la sortie d'un décompilateur est déjà normale (§6). Avec la loi 2, cela donne `decompile_B(compile_B(x)) ≡ N(x)` pour toute IR bien typée `x`, normale ou non.
 
 Ce qui n'est pas une loi et ne doit pas être testé comme telle :
 - `export_D(import_D(x)) = x` pour un fichier de design `x` quelconque. Le sens design → IR → design n'est pas l'identité, par construction (le design contient des choses que l'IR jette, comme des calques absolus).
@@ -389,7 +390,7 @@ Login.stories.tsx    zone générée : story avec les placeholders
 
 `Login.tsx` est écrit une seule fois, à la première compilation, puis jamais réécrit. Un fichier `ir-support.tsx`, un par projet, fournit `Icon` (sprite SVG, noms `web` de `icons.json`) et le type `ImageSource` (ADR-009).
 
-`decompile_css` lit `Login.gen.tsx` et `Login.gen.module.css` uniquement.
+`decompile_css` lit `Login.gen.tsx` et `Login.gen.module.css` uniquement, avec le design system, et rend la forme normale. C'est un parsing de forme, l'inverse de la table §11.1 : le nom de l'écran est celui du module CSS importé (`./Login.gen.module.css`) ; l'arbre est l'imbrication des éléments ; chaque nœud porte son `data-ir` et la règle du même nom ; le type se lit sur la balise et sur `display: flex` (un `<div>` sans lui est une `Box`) ; les propriétés se lisent sur les déclarations de la règle, le contenu, `role` et `label` sur l'élément. Chaque bloc `@media (min-width: n px)` désigne le breakpoint du design system de seuil n ; les déclarations effectives à ce breakpoint sont celles de la base recouvertes par le bloc (`revert` retire), et la surcharge est la différence entre les propriétés résolues à ce breakpoint et celles de la base, que `N` réencode. Tout ce qui sort de ces formes est E003, avec le chemin du nœud et ce qui a été trouvé ; un token, une icône ou un seuil inconnus du design system sont E002 ; un `data-ir` dupliqué est E005. Le décompilateur ne devine jamais : une déclaration ou un attribut qu'il ne sait pas lire est une erreur, pas un oubli.
 
 ### 9.2 Backend SwiftUI
 
@@ -403,7 +404,7 @@ LoginView.swift         zone préservée : struct LoginView, @State, logique, in
 
 ### 9.3 Slots
 
-Un `slot(nom)` sur un `Text` devient un paramètre `nom: String`. Sur une `Image`, un paramètre `nom: ImageSource` (type défini dans un support library minimal, un fichier par backend). Deux slots de même nom désignent le même paramètre et doivent être du même type (E004 au typecheck). Les valeurs d'exemple des slots ne sont pas dans l'IR : le compilateur les reçoit en option pour la story ou le `#Preview`, et prend le nom du slot à défaut. Un slot non fourni par la zone préservée est une erreur de compilation du langage cible, pas de l'IR : c'est le système de types du code qui garde cette frontière.
+Un `slot(nom)` sur un `Text` devient un paramètre `nom: String`. Sur une `Image`, un paramètre `nom: ImageSource` (type défini dans un support library minimal, un fichier par backend). Le nom d'un slot est donc un identifiant dans chaque cible : sans tiret (§3.1, E004 au parse), et jamais un mot réservé de la cible ni un nom que le fichier généré utilise déjà (`s`, `Icon`, `ImageSource` en React) : E004 à la compilation du backend concerné. Deux slots de même nom désignent le même paramètre et doivent être du même type (E004 au typecheck). Les valeurs d'exemple des slots ne sont pas dans l'IR : le compilateur les reçoit en option pour la story ou le `#Preview`, et prend le nom du slot à défaut. Un slot non fourni par la zone préservée est une erreur de compilation du langage cible, pas de l'IR : c'est le système de types du code qui garde cette frontière.
 
 ### 9.4 Identifiants
 
@@ -651,7 +652,7 @@ Cible React + CSS Modules (ADR-009). Chaque nœud a une classe nommée par son `
 | `w: fixed(n)` | `width: n px` ou `var(--size-x)`, plus `flex-shrink: 0` si l'axe est l'axe principal du parent |
 | `w: hug` (main) | `flex: 0 0 auto` |
 | `w: hug` (cross) | rien : `align-items` du parent, toujours émis, s'applique |
-| `w: fill` (main) | `flex: 1 1 0; min-width: 0` (`min-height: 0` en colonne) |
+| `w: fill` (main) | `flex: 1 1 0; min-width: 0` (`min-height: 0` en colonne) ; si `minW` (`minH`) est présent, sa déclaration remplace ce `0` |
 | `w: fill` (cross) | `align-self: stretch` |
 | `w`, `h` de la racine | `width` / `height` : `100%` (fill), `fit-content` (hug), `n px` (fixed), toujours émis |
 | `minW`, `maxW`, ... | `min-width`, `max-width`, ... |
@@ -666,7 +667,7 @@ Cible React + CSS Modules (ADR-009). Chaque nœud a une classe nommée par son `
 | `Text.color` | `color` |
 | `Text.align` | `text-align: center / end`, omis pour `start` |
 | `Text.maxLines: n` (`truncate: end`) | `display: -webkit-box; -webkit-line-clamp: n; -webkit-box-orient: vertical; overflow: hidden` |
-| `Text.maxLines: n, truncate: none` | `overflow: hidden; max-height: calc(n * Lem)`, L étant le `lineHeight` du token |
+| `Text.maxLines: n, truncate: none` | `overflow: hidden; max-height: calc(n * Lem)`, L étant le `lineHeight` du token ; avec `maxH`, `max-height: min(maxH, calc(n * Lem))` porte les deux |
 | `Image.fit: contain` | `object-fit: contain`, omis pour `cover` |
 | `Image.ratio: (w, h)` | `aspect-ratio: w / h` |
 | `Icon` | `<Icon name="nom web" />` (ADR-005) ; `width` et `height: var(--size-x)`, `color: var(--color-x)`, `flex-shrink: 0` |
@@ -676,12 +677,13 @@ Cible React + CSS Modules (ADR-009). Chaque nœud a une classe nommée par son `
 | `role: textfield` | `role="textbox"` |
 | `role: list`, `listitem`, `image` | `role="list"`, `role="listitem"`, `role="img"` |
 | `role: decorative` | `aria-hidden="true"` |
+| `role: heading(n)` sur un nœud autre qu'un `Text` | `role="heading" aria-level="n"` |
 | `label` | `aria-label` ; sur une `Image`, `alt` (`alt=""` sans label) |
 | contenu littéral | texte JSX, ou `{"…"}` s'il contient `{`, `}`, `<`, `>`, `&`, un retour à la ligne ou un espace en bord |
-| `slot(nom)` | `{nom}` sur un `Text` ; `src={nom.src} alt={nom.alt ?? ""}` sur une `Image` ; paramètre du composant |
+| `slot(nom)` | `{nom}` sur un `Text` ; `src={nom.src} alt={nom.alt ?? "…"}` sur une `Image`, le repli étant le `label` du nœud (`""` sans label) ; paramètre du composant |
 | `@expanded(...)` | `@media (min-width: 600px) { .id { ... } }` après la règle du nœud : les déclarations qui changent au breakpoint, et `revert` pour celles qui disparaissent |
 
-Le seuil 600 est lu dans le design system (`$bp.expanded`), jamais codé en dur dans le compilateur.
+Le seuil 600 est lu dans le design system (`$bp.expanded`), jamais codé en dur dans le compilateur. Le compilateur normalise son entrée (§7, loi 4) et n'émet jamais deux fois la même propriété dans une règle : la règle d'un nœud est une fonction de ses propriétés résolues, et la décompilation (§9.1) la lit comme un dictionnaire.
 
 ### 11.2 IR → SwiftUI
 
@@ -761,15 +763,15 @@ Le mode tolérant (`--tolerant`) arrondit les valeurs numériques au token le pl
 | Code | Type | Message | Où |
 |---|---|---|---|
 | E001 | erreur | Valeur littérale là où un token est requis | parse, import |
-| E002 | erreur | Token, icône ou breakpoint inconnu dans le design system, token non référençable, ou type DTCG inattendu pour le groupe | typecheck, compile |
-| E003 | erreur | Construction non représentable dans l'IR | import |
-| E004 | erreur | Propriété invalide pour ce type de nœud | parse |
-| E005 | erreur | Identifiant dupliqué | parse |
+| E002 | erreur | Token, icône ou breakpoint inconnu dans le design system, token non référençable, ou type DTCG inattendu pour le groupe | typecheck, compile, decompile |
+| E003 | erreur | Construction non représentable dans l'IR | import, decompile |
+| E004 | erreur | Propriété invalide pour ce type de nœud, ou nom de slot invalide (§9.3) | parse, compile |
+| E005 | erreur | Identifiant dupliqué | parse, decompile |
 | E006 | erreur | Image sans dimension résolvable | typecheck |
 | E007 | erreur | `fill` sous une contrainte infinie : enfant `fill` sur l'axe de défilement d'un Stack `scroll` (ADR-008), ou `fill` sans viewport | typecheck, layout |
 | E008 | erreur | Frames de breakpoints structurellement différentes | import |
 | E009 | erreur | Erreur de syntaxe (lexème inattendu, fin de fichier prématurée, type de nœud inconnu) | parse |
-| E010 | erreur | Design system invalide (fichier mal formé, alias vers un token inexistant, alias cyclique) | typecheck |
+| E010 | erreur | Design system invalide (fichier mal formé, alias vers un token inexistant, alias cyclique, deux icônes ou deux tokens de même nom pour une cible) | typecheck, compile, decompile |
 | W001 | avert. | `fill` dans un parent `hug`, normalisé en `hug` | normalize |
 | W002 | avert. | Valeur arrondie au token le plus proche (mode tolérant) | import |
 | W003 | avert. | Surcharge sans effet, supprimée | normalize |

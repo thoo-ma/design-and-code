@@ -5,14 +5,17 @@
  * (`X.stories.tsx`), et la première version de la zone préservée (`X.tsx`),
  * que l'appelant n'écrit que si elle n'existe pas. Pur : l'appelant écrit les
  * fichiers. Les déclarations CSS suivent l'ordre de la table §11.1, une par
- * ligne, pour que la décompilation soit un parsing de forme.
+ * ligne et jamais deux fois la même propriété, pour que la décompilation soit
+ * un parsing de forme. Le compilateur normalise son entrée (§7, loi 4).
  */
 
 import {
   BASE_BREAKPOINT,
+  RESERVED_SLOT_NAMES,
   fail,
   irError,
   lookupToken,
+  normalize,
   ok,
   resolveBreakpoint,
 } from "ir-core";
@@ -53,6 +56,8 @@ export interface CssOutput {
   readonly stories: string;
   /** `X.tsx` : zone préservée, à écrire une seule fois. */
   readonly preserved: string;
+  /** Avertissements de la forme normale appliquée à l'entrée (§7, loi 4). */
+  readonly warnings: readonly IRError[];
 }
 
 type Axis = "w" | "h";
@@ -97,8 +102,11 @@ export function compileCss(
   screen: Screen,
   options: CssCompileOptions,
 ): Result<CssOutput> {
-  const ctx = new Compiler(screen, options);
-  return ctx.run();
+  // Le compilateur travaille sur la forme normale (§7, loi 4) : les
+  // identifiants de la règle 6 sont garantis, et deux IR de même forme
+  // normale donnent le même code.
+  const normalized = normalize(screen);
+  return new Compiler(normalized.screen, options).run(normalized.warnings);
 }
 
 class Compiler {
@@ -114,7 +122,7 @@ class Compiler {
     this.ds = options.designSystem;
   }
 
-  run(): Result<CssOutput> {
+  run(warnings: readonly IRError[]): Result<CssOutput> {
     const css = this.cssFile();
     const tsx = this.tsxFile();
     if (this.errors.length > 0) return fail(this.errors);
@@ -125,6 +133,7 @@ class Compiler {
       css,
       stories: this.storiesFile(files),
       preserved: this.preservedFile(files),
+      warnings,
     });
   }
 
@@ -240,7 +249,7 @@ class Compiler {
     return `${header}\n\n${rules.join("\n\n")}\n`;
   }
 
-  /** Identifiant de nœud : `#id`, sinon le chemin d'indices (arbre non normalisé). */
+  /** Identifiant de nœud : son `#id`, que la forme normale garantit ; le chemin d'indices est un repli jamais atteint. */
   private keyOf(node: Node, indices: readonly number[]): string {
     return node.id ?? `n${indices.join("_")}`;
   }
@@ -272,6 +281,7 @@ class Compiler {
       node.type === "Icon"
         ? { kind: "fixed", value: node.props.size }
         : (node.props[axis] ?? { kind: "hug" });
+    let minInFlex: "minW" | "minH" | undefined;
     for (const axis of ["w", "h"] as const) {
       const prop = axis === "w" ? "width" : "height";
       const size = sizeOf(axis);
@@ -293,9 +303,17 @@ class Compiler {
       } else if (size.kind === "hug") {
         if (onMain) out.push(["flex", "0 0 auto"]);
       } else if (onMain) {
+        // Le min-* de fill vaut 0 ; une contrainte minW/minH le remplace,
+        // pour qu'une propriété n'apparaisse qu'une fois par règle (§11.1).
+        const minKey = main === "w" ? "minW" : "minH";
+        const min = node.type === "Icon" ? undefined : node.props[minKey];
+        if (min !== undefined) minInFlex = minKey;
         out.push(
           ["flex", "1 1 0"],
-          [main === "w" ? "min-width" : "min-height", "0"],
+          [
+            main === "w" ? "min-width" : "min-height",
+            min === undefined ? "0" : this.length(min),
+          ],
         );
       } else {
         out.push(["align-self", "stretch"]);
@@ -304,10 +322,19 @@ class Compiler {
 
     if (node.type !== "Icon") {
       const c = node.props;
-      if (c.minW !== undefined) out.push(["min-width", this.length(c.minW)]);
+      // Le maxH d'un Text coupé net (truncate: none) est porté par le
+      // max-height du clamp, en min() (§11.1).
+      const maxHInClamp =
+        node.type === "Text" &&
+        node.props.maxLines !== undefined &&
+        node.props.truncate === "none";
+      if (c.minW !== undefined && minInFlex !== "minW")
+        out.push(["min-width", this.length(c.minW)]);
       if (c.maxW !== undefined) out.push(["max-width", this.length(c.maxW)]);
-      if (c.minH !== undefined) out.push(["min-height", this.length(c.minH)]);
-      if (c.maxH !== undefined) out.push(["max-height", this.length(c.maxH)]);
+      if (c.minH !== undefined && minInFlex !== "minH")
+        out.push(["min-height", this.length(c.minH)]);
+      if (c.maxH !== undefined && !maxHInClamp)
+        out.push(["max-height", this.length(c.maxH)]);
     }
 
     if (node.type === "Stack") {
@@ -364,11 +391,14 @@ class Compiler {
           );
         } else {
           const lh = this.lineHeight(tp.style, path);
+          const clamp = `calc(${String(tp.maxLines)} * ${String(lh ?? 1)}em)`;
           out.push(
             ["overflow", "hidden"],
             [
               "max-height",
-              `calc(${String(tp.maxLines)} * ${String(lh ?? 1)}em)`,
+              tp.maxH === undefined
+                ? clamp
+                : `min(${this.length(tp.maxH)}, ${clamp})`,
             ],
           );
         }
@@ -426,8 +456,15 @@ class Compiler {
 
   private slot(name: string, type: Slot["type"], path: string): void {
     const seen = this.slots.find((s) => s.name === name);
-    if (seen === undefined) this.slots.push({ name, type });
-    else if (seen.type !== type)
+    if (seen === undefined) {
+      if (RESERVED_SLOT_NAMES.has(name))
+        this.report(
+          "E004",
+          path,
+          `slot(${name}) : nom réservé par la cible React, ou déjà utilisé par le fichier généré (§9.3). Le renommer.`,
+        );
+      this.slots.push({ name, type });
+    } else if (seen.type !== type)
       this.report("E004", path, `slot(${name}) utilisé avec deux types (§9.3)`);
   }
 
@@ -447,7 +484,7 @@ class Compiler {
     const role = node.props.role ?? { kind: "none" };
     const roleAttr = {
       none: undefined,
-      heading: undefined,
+      heading: node.type === "Text" ? undefined : "heading",
       button: "button",
       textfield: "textbox",
       list: "list",
@@ -456,6 +493,8 @@ class Compiler {
       decorative: undefined,
     }[role.kind];
     if (roleAttr !== undefined) attrs.push(`role="${roleAttr}"`);
+    if (role.kind === "heading" && node.type !== "Text")
+      attrs.push(`aria-level="${String(role.level)}"`);
     if (node.type === "Image") {
       attrs.push(...this.imageAttrs(node, path));
     } else if (node.props.label !== undefined) {
@@ -518,9 +557,10 @@ class Compiler {
   ): string[] {
     if (node.content.kind === "slot") {
       this.slot(node.content.name, "ImageSource", path);
+      // Le label du nœud est le repli de alt (§11.1) ; "" sans label.
       return [
         `src={${node.content.name}.src}`,
-        `alt={${node.content.name}.alt ?? ""}`,
+        `alt={${node.content.name}.alt ?? ${JSON.stringify(node.props.label ?? "")}}`,
       ];
     }
     return [

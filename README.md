@@ -16,7 +16,7 @@ Un langage intermédiaire pour les interfaces, dont le design et le code sont de
 
 ## État
 
-Spec v0.1 écrite et précisée au fil des tâches ; questions ouvertes 1, 2, 3, 5, 7 et 8 tranchées (ADR 003 à 007), 4 et 6 restent ouvertes. T0 (bootstrap), T1 (AST, erreurs, schémas zod), T2 (parse, print, loi 0), T3 (forme normale, loi 4 idempotence) et T4 (design system, typecheck) faits dans `ir-core` ; T5 (compilateur de tokens) fait dans `ir-backend-css` et `ir-backend-swiftui` ; T6 (layout de référence, ADR-008) fait dans `ir-layout-ref` ; T7 (compilateur IR → React + CSS Modules, ADR-009) fait dans `ir-backend-css`. Tâche courante : T8.
+Spec v0.1 écrite et précisée au fil des tâches ; questions ouvertes 1, 2, 3, 5, 7 et 8 tranchées (ADR 003 à 007), 4 et 6 restent ouvertes. T0 (bootstrap), T1 (AST, erreurs, schémas zod), T2 (parse, print, loi 0), T3 (forme normale, loi 4 idempotence) et T4 (design system, typecheck) faits dans `ir-core` ; T5 (compilateur de tokens) fait dans `ir-backend-css` et `ir-backend-swiftui` ; T6 (layout de référence, ADR-008) fait dans `ir-layout-ref` ; T7 (compilateur IR → React + CSS Modules, ADR-009) et T8 (décompilateur, loi 2 et commutation de la loi 4) faits dans `ir-backend-css`. Tâche courante : T9.
 
 ## Structure
 

@@ -208,6 +208,8 @@ export function loadDesignSystem(
 
   // 4. Icônes.
   const iconMap = new Map<string, Readonly<Record<string, string>>>();
+  /** Nom par backend → icône, pour refuser deux icônes indistinguables (loi 2). */
+  const backendNames = new Map<string, string>();
   if (icons !== undefined) {
     const table = isObject(icons) ? icons["icons"] : undefined;
     if (!isObject(table)) {
@@ -225,8 +227,18 @@ export function loadDesignSystem(
           continue;
         }
         const entry: Record<string, string> = {};
-        for (const [backend, v] of Object.entries(backends))
-          if (typeof v === "string") entry[backend] = v;
+        for (const [backend, v] of Object.entries(backends)) {
+          if (typeof v !== "string") continue;
+          const other = backendNames.get(`${backend}:${v}`);
+          if (other !== undefined) {
+            e010(
+              `icons.${name}`,
+              `L'icône « ${name} » a le même nom « ${v} » que « ${other} » pour le backend ${backend} : la décompilation ne pourrait pas les distinguer (loi 2). Les renommer.`,
+            );
+          }
+          backendNames.set(`${backend}:${v}`, name);
+          entry[backend] = v;
+        }
         iconMap.set(name, entry);
       }
     }
