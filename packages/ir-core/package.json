@@ -11,6 +11,9 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },
+  "dependencies": {
+    "zod": "catalog:"
+  },
   "devDependencies": {
     "fast-check": "catalog:",
     "typescript": "catalog:",

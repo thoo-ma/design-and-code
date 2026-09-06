@@ -15,7 +15,7 @@ Un langage intermédiaire pour les interfaces, dont le design et le code sont de
 
 ## État
 
-Spec v0.1 écrite. Monorepo amorcé (T0), aucun comportement. Tâche courante : T1.
+Spec v0.1 écrite. T0 (bootstrap) et T1 (AST, erreurs, schémas zod dans `ir-core`) faits. Tâche courante : T2.
 
 ## Structure
 
