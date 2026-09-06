@@ -6,12 +6,13 @@ Un langage intermédiaire pour les interfaces, dont le design et le code sont de
 
 ## Lire dans cet ordre
 
-1. `docs/adr/001-ir-source-de-verite.md` — pourquoi une IR plutôt que Figma ou le code
-2. `docs/adr/002-adjonction-et-fragment.md` — les lois, et la frontière design/code
-3. `docs/adr/003-layout-dabord.md` — par où on commence
-4. `docs/spec-ir-v0.md` — la spec du langage, qui fait autorité sur tout comportement
-5. `TASKS.md` — le plan de travail
-6. `CLAUDE.md` — le contexte pour les agents
+1. `docs/architecture.md` — la carte : les trois mondes, les lois, les packages, en diagrammes
+2. `docs/adr/001-ir-source-de-verite.md` — pourquoi une IR plutôt que Figma ou le code
+3. `docs/adr/002-adjonction-et-fragment.md` — les lois, et la frontière design/code
+4. `docs/adr/003-layout-dabord.md` — par où on commence
+5. `docs/spec-ir-v0.md` — la spec du langage, qui fait autorité sur tout comportement
+6. `TASKS.md` — le plan de travail
+7. `CLAUDE.md` — le contexte pour les agents
 
 ## Décisions
 
@@ -74,8 +75,10 @@ La CI (`.github/workflows/ci.yml`) lance les quatre premières vérifications en
 
 ## Structure
 
+`docs/architecture.md` est la carte du projet : l'axe qui va du fichier de design aux pixels avec les lois posées sur les flèches qu'elles contraignent, le pipeline de `ir-core` avec les codes d'erreur sur l'étape qui les émet, la loi 3 en détail, les deux zones du code généré.
+
 ```
-docs/            spec et ADR
+docs/            spec, ADR et la carte de l'architecture
 examples/        Login.ir et ses sorties golden : code compilé, géométrie de référence
 fixtures/        design system minimal (DTCG) et sorties attendues du compilateur de tokens
 packages/        ir-core, ir-layout-ref, backends, importeurs
