@@ -280,15 +280,17 @@ Toute comparaison d'IR (dans les lois, dans les tests, dans les diffs) se fait s
 
 Règles, appliquées dans cet ordre :
 
-1. **Élimination de fill-in-hug.** Un enfant `fill` sur un axe où son parent Stack est `hug` sur le même axe devient `hug`. (Figma applique la même règle silencieusement ; ici elle est explicite et produit un avertissement W001 à l'import.)
-2. **Élimination des défauts.** Toute propriété égale à sa valeur par défaut est omise.
-3. **Élimination des surcharges vides.** Un `@bp(...)` dont chaque propriété est égale à la valeur de base est supprimé.
-4. **Résolution de `truncate`.** `truncate: end` est omis si `maxLines` est présent ; `truncate: none` sans `maxLines` est omis.
+1. **Élimination de fill-in-hug.** Un enfant `fill` sur un axe où son parent Stack est `hug` sur le même axe devient `hug`, sauf si ce parent est lui-même étiré sur cet axe par son propre parent (`crossAlign: stretch` du grand-parent, l'axe étant l'axe secondaire du grand-parent) : un Stack étiré dispose de l'espace et ses enfants `fill` le remplissent, c'est le cas de `#primary` dans `#actions` en §10. La règle s'évalue breakpoint par breakpoint sur les propriétés résolues (base plus surcharge), et le résultat est réencodé en base plus surcharges. Chaque changement produit un avertissement W001. (Figma applique la même règle silencieusement.)
+2. **Élimination des défauts.** Toute propriété de base égale à sa valeur par défaut est omise. L'égalité est sémantique : `pad: ($space.none, $space.none)` vaut le défaut. Une propriété n'est omise que si sa résolution (défauts de §4 compris, dont celui de `truncate`) est la même à chaque breakpoint avec et sans elle.
+3. **Élimination des surcharges vides.** Une propriété de surcharge dont la résolution au breakpoint est la même avec et sans elle est omise. Un `@bp(...)` devenu vide est supprimé, avec un avertissement W003.
+4. **Résolution de `truncate`.** Le défaut de `truncate` dépend de `maxLines` (§4.4). Par la règle 2 : `truncate: end` est omis si `maxLines` est présent ; `truncate: none` sans `maxLines` est omis, sauf si une surcharge ajoute `maxLines`, auquel cas `none` porte un sens et reste.
 5. **Ordre canonique des propriétés.** L'ordre est celui des tables de §4, `w`/`h` d'abord, puis contraintes, puis propriétés du type, puis style, puis `role`/`label`.
-6. **Identifiants.** Un nœud sans `#id` reçoit `#n_<hash>` où le hash est celui de son chemin (indices depuis la racine) et de son type. Déterministe, donc stable tant que la structure ne change pas.
-7. **Padding.** `pad: ($a, $a)` devient `pad: $a` ; `pad: ($a, $b, $a, $b)` devient `pad: ($a, $b)`.
+6. **Identifiants.** Un nœud sans `#id` reçoit `#n_<hash>`, où le hash est FNV-1a 32 bits, sur huit chiffres hexadécimaux, de la chaîne `type:i1/i2/…` formée de son type et de son chemin d'indices depuis la racine (chemin vide pour la racine, donc `Stack:`). Déterministe, donc stable tant que la structure ne change pas. Si l'identifiant obtenu existe déjà dans le document, le chemin d'indices lui est ajouté en suffixe (`_i1_i2`), autant de fois que nécessaire.
+7. **Padding.** `pad: ($a, $b, $a, $b)` devient `pad: ($a, $b)`, puis `pad: ($a, $a)` devient `pad: $a`. Deux tokens sont égaux s'ils ont le même groupe et le même chemin.
 
-La forme normale est la sortie de tous les importeurs et de tous les décompilateurs. Le fichier `.ir` commité est toujours en forme normale ; un hook de pre-commit l'assure.
+Les règles sont indépendantes de leur ordre d'application ; l'ordre ci-dessus est celui de l'implémentation de référence. `N` est totale sur un AST bien typé : elle ne peut pas échouer, elle rend l'arbre normalisé et ses avertissements.
+
+La forme normale est la sortie de tous les importeurs et de tous les décompilateurs. Le fichier `.ir` commité est toujours en forme normale ; un hook de pre-commit l'assure, et le golden test de `examples/` le vérifie.
 
 ---
 

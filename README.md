@@ -15,7 +15,7 @@ Un langage intermédiaire pour les interfaces, dont le design et le code sont de
 
 ## État
 
-Spec v0.1 écrite et précisée (§3.1, §3.4, §4, §12). T0 (bootstrap), T1 (AST, erreurs, schémas zod) et T2 (parse, print, loi 0) faits dans `ir-core`. Tâche courante : T3.
+Spec v0.1 écrite et précisée (§3.1, §3.4, §4, §6, §12). T0 (bootstrap), T1 (AST, erreurs, schémas zod), T2 (parse, print, loi 0) et T3 (forme normale, loi 4 idempotence) faits dans `ir-core`. Tâche courante : T4.
 
 ## Structure
 

@@ -6,5 +6,6 @@ export * from "./schema.js";
 export * from "./lexer.js";
 export * from "./parser.js";
 export * from "./printer.js";
+export * from "./normalize.js";
 export * from "./props.js";
 export * from "./values.js";

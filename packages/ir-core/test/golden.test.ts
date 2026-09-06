@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { parse, print } from "../src/index.js";
+import { normalize, parse, print } from "../src/index.js";
 
 import { loginAst } from "./login.ast.js";
 
@@ -23,6 +23,12 @@ describe("golden : examples/Login.ir (spec §10.1)", () => {
     const result = parse(source);
     expect(result.ok).toBe(true);
     if (result.ok) expect(print(result.value.screen)).toBe(source);
+  });
+
+  it("Login.ir est en forme normale : N(loginAst) = loginAst, sans avertissement", () => {
+    const result = normalize(loginAst);
+    expect(result.warnings).toStrictEqual([]);
+    expect(result.screen).toStrictEqual(loginAst);
   });
 
   it("print(loginAst) est le fichier committé", () => {
