@@ -135,6 +135,11 @@ describe("E004 — propriété invalide pour ce type de nœud", () => {
     ["ratio nul", 'Image (ratio: (0, 1)) "a.png"'],
     ["énumération inconnue", "Stack (dir: diagonal)"],
     ["label sans guillemets", "Box (label: Email)"],
+    ["nom de slot avec un tiret", `Text (${TEXT_PROPS}) slot(my-slot)`],
+    [
+      "surcharge de name sur Icon",
+      "Icon (name: $icon.help, size: $size.icon.md, color: $color.text.primary) @expanded(name: $icon.check)",
+    ],
   ])("%s", (_label, node) => {
     const errors = errorsOf(wrap(node));
     expect(errors.length).toBeGreaterThan(0);

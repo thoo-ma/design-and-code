@@ -33,6 +33,23 @@ describe("golden : tokens.css (spec T5)", () => {
   });
 });
 
+describe("E010 : deux tokens de même nom CSS (loi 2)", () => {
+  it("size.icon-md et size.icon.md donneraient tous deux --size-icon-md", () => {
+    const px = (value: number) => ({ $value: { value, unit: "px" } });
+    const r = compileTokensCss(
+      themed({
+        size: { $type: "dimension", "icon-md": px(24), icon: { md: px(24) } },
+      }),
+      OPTIONS,
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok)
+      expect(r.errors.map((e) => `${e.code} ${e.path}`)).toStrictEqual([
+        "E010 size.icon.md",
+      ]);
+  });
+});
+
 describe("valeurs", () => {
   it("couleur : hex du fichier, sinon calculé depuis les composantes, rgba si alpha < 1", () => {
     expect(

@@ -29,7 +29,13 @@ export type Severity = "error" | "warning";
 
 /** Étape qui peut émettre le diagnostic (colonne « Où » de la spec §12). */
 export type Stage =
-  "parse" | "import" | "typecheck" | "layout" | "normalize" | "compile";
+  | "parse"
+  | "import"
+  | "typecheck"
+  | "layout"
+  | "normalize"
+  | "compile"
+  | "decompile";
 
 export interface DiagnosticSpec {
   readonly severity: Severity;
@@ -49,22 +55,23 @@ export const DIAGNOSTICS: Readonly<Record<DiagnosticCode, DiagnosticSpec>> = {
     severity: "error",
     summary:
       "Token, icône ou breakpoint inconnu dans le design system, token non référençable, ou type DTCG inattendu pour le groupe",
-    stages: ["typecheck", "compile"],
+    stages: ["typecheck", "compile", "decompile"],
   },
   E003: {
     severity: "error",
     summary: "Construction non représentable dans l'IR",
-    stages: ["import"],
+    stages: ["import", "decompile"],
   },
   E004: {
     severity: "error",
-    summary: "Propriété invalide pour ce type de nœud",
-    stages: ["parse"],
+    summary:
+      "Propriété invalide pour ce type de nœud, ou nom de slot invalide (§9.3)",
+    stages: ["parse", "compile"],
   },
   E005: {
     severity: "error",
     summary: "Identifiant dupliqué",
-    stages: ["parse"],
+    stages: ["parse", "decompile"],
   },
   E006: {
     severity: "error",
@@ -91,8 +98,8 @@ export const DIAGNOSTICS: Readonly<Record<DiagnosticCode, DiagnosticSpec>> = {
   E010: {
     severity: "error",
     summary:
-      "Design system invalide (fichier mal formé, alias vers un token inexistant, alias cyclique)",
-    stages: ["typecheck"],
+      "Design system invalide (fichier mal formé, alias vers un token inexistant, alias cyclique, deux icônes ou deux tokens de même nom pour une cible)",
+    stages: ["typecheck", "compile", "decompile"],
   },
   W001: {
     severity: "warning",

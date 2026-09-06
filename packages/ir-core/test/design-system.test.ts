@@ -120,6 +120,18 @@ describe("E010 — design system invalide", () => {
     ).toStrictEqual(["E010 bp.expanded"]);
   });
 
+  it("deux icônes de même nom pour un backend sont indistinguables (loi 2)", () => {
+    expect(
+      codesOf(
+        {},
+        { icons: { a: { web: "x", ios: "a" }, b: { web: "x", ios: "b" } } },
+      ),
+    ).toStrictEqual(["E010 icons.b"]);
+    expect(
+      codesOf({}, { icons: { a: { web: "x" }, b: { ios: "x" } } }),
+    ).toStrictEqual([]);
+  });
+
   it("icons.json mal formé", () => {
     expect(codesOf({}, { nope: {} })).toStrictEqual(["E010 icons"]);
     expect(codesOf({}, { icons: { help: { web: 1 } } })).toStrictEqual([

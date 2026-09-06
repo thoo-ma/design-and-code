@@ -252,6 +252,15 @@ describe("règle 3 — surcharges sans effet", () => {
   });
 });
 
+describe("règle 2 — label vide", () => {
+  it('label: "" vaut l\'absence de label', () => {
+    expect(N(box({ label: "" })).root).toStrictEqual(box({}));
+    expect(N(box({ label: "Email" })).root).toStrictEqual(
+      box({ label: "Email" }),
+    );
+  });
+});
+
 describe("règle 4 — truncate", () => {
   it("end avec maxLines est le défaut", () => {
     expect(N(text({ maxLines: 2, truncate: "end" })).root).toStrictEqual(
@@ -268,9 +277,39 @@ describe("règle 4 — truncate", () => {
   it("end sans maxLines est sans effet, donc omis", () => {
     expect(N(text({ truncate: "end" })).root).toStrictEqual(text({}));
   });
-  it("none sans maxLines reste si une surcharge ajoute maxLines", () => {
+  it("none sans maxLines est déplacé dans la surcharge qui ajoute maxLines", () => {
     const t = text({ truncate: "none" }, [
       { breakpoint: "expanded", props: { maxLines: 3 } },
+    ]);
+    expect(N(t).root).toStrictEqual(
+      text({}, [
+        { breakpoint: "expanded", props: { maxLines: 3, truncate: "none" } },
+      ]),
+    );
+  });
+  it("deux écritures de même sens ont la même forme normale", () => {
+    const atBase = text({ truncate: "none" }, [
+      { breakpoint: "expanded", props: { maxLines: 3 } },
+    ]);
+    const inOverride = text({}, [
+      { breakpoint: "expanded", props: { maxLines: 3, truncate: "none" } },
+    ]);
+    expect(N(atBase)).toStrictEqual(N(inOverride));
+    expect(N(inOverride).root).toStrictEqual(inOverride);
+  });
+  it("none à la base avec maxLines reste à la base, et la surcharge qui change maxLines ne le répète pas", () => {
+    const t = text({ maxLines: 2, truncate: "none" }, [
+      { breakpoint: "expanded", props: { maxLines: 3, truncate: "none" } },
+    ]);
+    expect(N(t).root).toStrictEqual(
+      text({ maxLines: 2, truncate: "none" }, [
+        { breakpoint: "expanded", props: { maxLines: 3 } },
+      ]),
+    );
+  });
+  it("une surcharge qui passe de none à end porte end", () => {
+    const t = text({ maxLines: 2, truncate: "none" }, [
+      { breakpoint: "expanded", props: { truncate: "end" } },
     ]);
     expect(N(t).root).toStrictEqual(t);
   });

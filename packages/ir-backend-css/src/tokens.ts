@@ -32,10 +32,41 @@ export const cssVariable = (entry: TokenEntry): string =>
 export const cssTypographyClass = (entry: TokenEntry): string =>
   `.${entry.path.join("-")}`;
 
+/**
+ * Index nom CSS → token, pour la décompilation (spec §9.1) : `space-md` →
+ * `$space.md`. Deux tokens de même nom (`size.icon-md` et `size.icon.md`)
+ * seraient indistinguables dans le code généré : E010 (loi 2).
+ */
+export function cssNameIndex(
+  ds: DesignSystem,
+): Result<ReadonlyMap<string, TokenEntry>> {
+  const index = new Map<string, TokenEntry>();
+  const errors: IRError[] = [];
+  for (const entry of ds.tokens.values()) {
+    if (!entry.referenceable || entry.path[0] === "bp") continue;
+    const name = entry.path.join("-");
+    const other = index.get(name);
+    if (other === undefined) {
+      index.set(name, entry);
+      continue;
+    }
+    errors.push(
+      irError(
+        "E010",
+        entry.path.join("."),
+        `« ${entry.path.join(".")} » et « ${other.path.join(".")} » ont le même nom CSS « ${name} » : le code généré ne pourrait pas les distinguer (loi 2). Renommer l'un des deux. (compilateur de tokens CSS)`,
+      ),
+    );
+  }
+  return errors.length > 0 ? fail(errors) : ok(index);
+}
+
 export function compileTokensCss(
   ds: ThemedDesignSystem,
   options: TokenCompilerOptions,
 ): Result<string> {
+  const index = cssNameIndex(ds.light);
+  if (!index.ok) return fail(index.errors);
   const errors: IRError[] = [];
   const e010 = (entry: TokenEntry, message: string): void => {
     errors.push(
