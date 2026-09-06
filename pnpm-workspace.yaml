@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+
+# Versions partagées par tous les packages (protocole `catalog:`).
+catalog:
+  fast-check: ^4.9.0
+  typescript: ~6.0.3
+  vitest: ^5.0.0
