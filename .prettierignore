@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+pnpm-lock.yaml
+
+# Écrits à la main, jamais reformatés : spec, ADR, fixtures, exemples .ir.
+docs/
+fixtures/
+examples/
+*.md

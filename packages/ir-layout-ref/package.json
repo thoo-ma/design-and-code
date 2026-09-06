@@ -1,0 +1,22 @@
+{
+  "name": "ir-layout-ref",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Sémantique de référence du layout (spec §5)",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "ir-core": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
