@@ -40,7 +40,7 @@ import type {
 } from "ir-core";
 
 import { classAccess } from "./compile.js";
-import { cssNameIndex } from "./tokens.js";
+import { TYPOGRAPHY_PROPERTIES, cssNameIndex } from "./tokens.js";
 
 export interface CssSources {
   /** Contenu de `X.gen.tsx`. */
@@ -851,8 +851,15 @@ class Decompiler {
         if (ctx.isRoot) {
           if (v === undefined) bad(`${prop} requis sur la racine`);
           else if (v === "100%") size = FILL;
-          else if (v === "fit-content") size = HUG;
+          else if (v === "max-content") size = HUG;
           else size = this.fixed(v, ctx, prop);
+        } else if (v === "max-content") {
+          // Stack dont l'axe principal est la largeur : hug (§11.1).
+          size = HUG;
+          if (axis === ctx.main && r.take("flex") !== "0 0 auto")
+            bad(
+              "flex: 0 0 auto attendu avec width: max-content sur l'axe principal",
+            );
         } else if (axis === ctx.main) {
           if (v !== undefined) {
             size = this.fixed(v, ctx, prop);
@@ -963,16 +970,22 @@ class Decompiler {
       const radius = r.take("border-radius");
       if (radius !== undefined)
         set("radius", this.token(radius, "radius", ctx, "border-radius"));
-      const border = r.take("border");
-      if (border !== undefined) {
-        const m = BORDER.exec(border);
+      // Contour interne : la bordure décorative de l'ADR-010.
+      const border = r.take("outline");
+      const offset = r.take("outline-offset");
+      if (border !== undefined || offset !== undefined) {
+        const m = border === undefined ? null : BORDER.exec(border);
         if (m === null || m[1] === undefined || m[2] === undefined) {
           bad(
-            `border: ${border} inattendu : var(--size-…) solid var(--color-…) attendu`,
+            `outline: ${border ?? "absent"} inattendu : var(--size-…) solid var(--color-…) attendu`,
+          );
+        } else if (offset !== `calc(-1 * ${m[1]})`) {
+          bad(
+            `outline-offset: calc(-1 * ${m[1]}) attendu avec ce contour, trouvé ${offset ?? "rien"}`,
           );
         } else {
-          const w = this.token(m[1], "size", ctx, "border");
-          const c = this.token(m[2], "color", ctx, "border");
+          const w = this.token(m[1], "size", ctx, "outline");
+          const c = this.token(m[2], "color", ctx, "outline");
           if (w !== undefined && c !== undefined) out["border"] = [w, c];
         }
       }
@@ -985,14 +998,23 @@ class Decompiler {
     }
 
     if (type === "Text") {
-      const composes = r.take("composes");
-      const m =
-        composes === undefined ? null : /^(\S+) from global$/.exec(composes);
-      if (m === null || m[1] === undefined)
+      // Les cinq propriétés de §11.1, toutes tirées du même token.
+      const names = TYPOGRAPHY_PROPERTIES.map((property) => {
+        const value = r.take(property);
+        const m = value === undefined ? null : VAR.exec(value);
+        const name = m?.[1];
+        return name === undefined || !name.endsWith(`-${property}`)
+          ? undefined
+          : name.slice(0, -property.length - 1);
+      });
+      const style = names[0];
+      if (style === undefined || names.some((n) => n !== style)) {
         bad(
-          `composes: ${composes ?? "absent"} inattendu : « type-x from global » attendu`,
+          `un Text porte ${TYPOGRAPHY_PROPERTIES.join(", ")}, toutes en var(--type-x-<propriété>) du même token`,
         );
-      else set("style", this.named(m[1], "type", ctx, "composes"));
+      } else {
+        set("style", this.named(style, "type", ctx, "font-size"));
+      }
       const color = r.take("color");
       if (color === undefined) bad("color requis sur un Text");
       else set("color", this.token(color, "color", ctx, "color"));
@@ -1000,6 +1022,11 @@ class Decompiler {
       if (align === undefined) out["align"] = "start";
       else if (align === "center" || align === "end") out["align"] = align;
       else bad(`text-align: ${align} inattendu`);
+      const space = r.take("white-space");
+      if (space !== "pre-wrap")
+        bad(
+          `white-space: pre-wrap attendu sur un Text, trouvé ${space ?? "rien"}`,
+        );
       this.clamp(r, out, ctx, bad);
     }
 
@@ -1054,6 +1081,13 @@ class Decompiler {
         bad("-webkit-box-orient: vertical attendu avec le line-clamp");
       if (r.take("overflow") !== "hidden")
         bad("overflow: hidden attendu avec le line-clamp");
+      // Hauteur déjà définie : la coupe nette est portée par une propriété
+      // personnalisée, une hauteur maximale changerait la boîte (§11.1).
+      const clean = r.take("--ir-truncate");
+      if (clean !== undefined) {
+        if (clean !== "none") bad(`--ir-truncate: ${clean} inattendu`);
+        out["truncate"] = "none";
+      }
       const maxH = r.take("max-height");
       if (maxH !== undefined) {
         if (maxH === "0") bad("max-height: 0 sans unité");

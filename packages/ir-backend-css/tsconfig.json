@@ -1,7 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    // DOM pour le harnais de la loi 3 (test/geometry) : le code exécuté dans
+    // la page par Playwright manipule `document`. `src` n'en dépend pas.
+    "lib": ["ES2022", "DOM"]
   },
   "include": ["src", "test"]
 }

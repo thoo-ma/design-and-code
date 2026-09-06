@@ -30,6 +30,32 @@
   --color-accent: #2F6FDE;
   --color-border-default: #C9C7C0;
 
+  --type-heading-lg-font-family: Inter, system-ui, sans-serif;
+  --type-heading-lg-font-size: 28px;
+  --type-heading-lg-line-height: 1.214;
+  --type-heading-lg-font-weight: 600;
+  --type-heading-lg-letter-spacing: -0.4px;
+  --type-heading-md-font-family: Inter, system-ui, sans-serif;
+  --type-heading-md-font-size: 22px;
+  --type-heading-md-line-height: 1.273;
+  --type-heading-md-font-weight: 600;
+  --type-heading-md-letter-spacing: -0.2px;
+  --type-body-md-font-family: Inter, system-ui, sans-serif;
+  --type-body-md-font-size: 16px;
+  --type-body-md-line-height: 1.5;
+  --type-body-md-font-weight: 400;
+  --type-body-md-letter-spacing: 0px;
+  --type-body-sm-font-family: Inter, system-ui, sans-serif;
+  --type-body-sm-font-size: 14px;
+  --type-body-sm-line-height: 1.429;
+  --type-body-sm-font-weight: 400;
+  --type-body-sm-letter-spacing: 0px;
+  --type-label-md-font-family: Inter, system-ui, sans-serif;
+  --type-label-md-font-size: 15px;
+  --type-label-md-line-height: 1.333;
+  --type-label-md-font-weight: 500;
+  --type-label-md-letter-spacing: 0.1px;
+
   --shadow-sm: 0px 1px 2px 0px rgba(0, 0, 0, 0.08);
   --shadow-md: 0px 4px 12px 0px rgba(0, 0, 0, 0.12);
 }
@@ -47,10 +73,11 @@
   --shadow-md: 0px 4px 12px 0px rgba(0, 0, 0, 0.5);
 }
 
-/* Tokens composites de typographie : une classe par token. Text.style: $type.heading.lg -> .type-heading-lg */
+/* Tokens composites de typographie : une classe par token, pour le code écrit à la main. */
+/* La zone générée, elle, cite les variables ci-dessus, qui fonctionnent aussi dans un @media. */
 
-.type-heading-lg { font-family: Inter, system-ui, sans-serif; font-size: 28px; line-height: 1.214; font-weight: 600; letter-spacing: -0.4px; }
-.type-heading-md { font-family: Inter, system-ui, sans-serif; font-size: 22px; line-height: 1.273; font-weight: 600; letter-spacing: -0.2px; }
-.type-body-md    { font-family: Inter, system-ui, sans-serif; font-size: 16px; line-height: 1.5;   font-weight: 400; letter-spacing: 0px; }
-.type-body-sm    { font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.429; font-weight: 400; letter-spacing: 0px; }
-.type-label-md   { font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.333; font-weight: 500; letter-spacing: 0.1px; }
+.type-heading-lg { font-family: var(--type-heading-lg-font-family); font-size: var(--type-heading-lg-font-size); line-height: var(--type-heading-lg-line-height); font-weight: var(--type-heading-lg-font-weight); letter-spacing: var(--type-heading-lg-letter-spacing); }
+.type-heading-md { font-family: var(--type-heading-md-font-family); font-size: var(--type-heading-md-font-size); line-height: var(--type-heading-md-line-height); font-weight: var(--type-heading-md-font-weight); letter-spacing: var(--type-heading-md-letter-spacing); }
+.type-body-md    { font-family: var(--type-body-md-font-family);    font-size: var(--type-body-md-font-size);    line-height: var(--type-body-md-line-height);    font-weight: var(--type-body-md-font-weight);    letter-spacing: var(--type-body-md-letter-spacing); }
+.type-body-sm    { font-family: var(--type-body-sm-font-family);    font-size: var(--type-body-sm-font-size);    line-height: var(--type-body-sm-line-height);    font-weight: var(--type-body-sm-font-weight);    letter-spacing: var(--type-body-sm-letter-spacing); }
+.type-label-md   { font-family: var(--type-label-md-font-family);   font-size: var(--type-label-md-font-size);   line-height: var(--type-label-md-line-height);   font-weight: var(--type-label-md-font-weight);   letter-spacing: var(--type-label-md-letter-spacing); }

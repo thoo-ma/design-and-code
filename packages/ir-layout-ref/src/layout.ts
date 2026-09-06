@@ -55,10 +55,14 @@ export function layout(
   const breakpoint = activeBreakpoint(options.designSystem, options.viewport.w);
   const flat = resolveBreakpoint(screen, breakpoint);
   const ctx = new Layout(options);
+  // La racine reçoit le viewport là où elle est fixed ou fill, et ∞ là où
+  // elle est hug : c'est alors son contenu qui décide (§5.2).
+  const constraint = (axis: Axis, value: number): number =>
+    ctx.rootMode(flat.root, axis) === "hug" ? Number.POSITIVE_INFINITY : value;
   const measured = ctx.measure(
     flat.root,
-    options.viewport.w,
-    options.viewport.h,
+    constraint("w", options.viewport.w),
+    constraint("h", options.viewport.h),
     [],
     "",
   );
@@ -83,15 +87,28 @@ class Layout {
     const entry = lookupToken(this.options.designSystem, token);
     const px = entry === undefined ? undefined : dimensionPx(entry.value);
     if (px === undefined) {
-      this.errors.push(
-        irError(
-          "E002",
-          path,
-          `Token $${[token.group, ...token.path].join(".")} irrésolu en longueur au layout.`,
-        ),
+      this.report(
+        "E002",
+        path,
+        `Token $${[token.group, ...token.path].join(".")} irrésolu en longueur au layout.`,
       );
     }
     return px;
+  }
+
+  /** Un diagnostic par cause et par nœud : une valeur peut être lue deux fois. */
+  private report(
+    code: "E002" | "E007" | "E010",
+    path: string,
+    message: string,
+  ): void {
+    if (
+      this.errors.some(
+        (e) => e.code === code && e.path === path && e.message === message,
+      )
+    )
+      return;
+    this.errors.push(irError(code, path, message));
   }
 
   private typography(token: Token, path: string): Typography {
@@ -195,6 +212,17 @@ class Layout {
     return bound === undefined ? max : Math.min(max, bound);
   }
 
+  /** Taille extérieure : bornée par min/max, puis par le padding, incompressible. */
+  private outer(
+    node: Node,
+    axis: Axis,
+    value: number,
+    padding: number,
+    path: string,
+  ): number {
+    return Math.max(this.clamp(node, axis, value, path), padding);
+  }
+
   private clamp(node: Node, axis: Axis, value: number, path: string): number {
     const min = this.bound(node, axis, "min", path);
     const max = this.bound(node, axis, "max", path);
@@ -206,12 +234,10 @@ class Layout {
 
   private fillSize(max: number, axis: Axis, path: string): number {
     if (Number.isFinite(max)) return max;
-    this.errors.push(
-      irError(
-        "E007",
-        path,
-        `${axis}: fill sous une contrainte infinie. Donner fixed ou hug, ou borner le parent (ADR-008).`,
-      ),
+    this.report(
+      "E007",
+      path,
+      `${axis}: fill sous une contrainte infinie. Donner fixed ou hug, ou borner le parent (ADR-008).`,
     );
     return 0;
   }
@@ -271,38 +297,56 @@ class Layout {
           ? content.value
           : (this.options.slots?.[content.name] ?? "");
       const style = this.typography(node.props.style, path);
+      // Largeurs intrinsèques, indépendantes de maxLines : le mot le plus
+      // long (minimum de contenu) et le texte sans repli (maximum).
+      const intrinsic = (width: number): number =>
+        this.options.platform.measureText(text, style, width, undefined).w;
+      // `hug` est la largeur sans repli, bornée par l'espace offert, mais
+      // jamais sous le mot le plus long : un texte ne se replie pas à
+      // l'intérieur d'un mot (§5.2). Le texte se replie ensuite dans la
+      // largeur utilisée, bornes min/max comprises, et elle donne la hauteur.
       const wMode = this.mode(node, "w", forced);
-      const availableWidth =
+      const width = this.clamp(
+        node,
+        "w",
         wMode.kind === "fixed"
           ? this.length(wMode.value, path)
-          : this.available(node, "w", maxW, path);
+          : wMode.kind === "fill"
+            ? this.fillSize(maxW, "w", path)
+            : Math.max(
+                intrinsic(0),
+                Math.min(
+                  intrinsic(Number.POSITIVE_INFINITY),
+                  this.available(node, "w", maxW, path),
+                ),
+              ),
+        path,
+      );
       const size = this.options.platform.measureText(
         text,
         style,
-        availableWidth,
+        width,
         node.props.maxLines,
       );
-      return leaf(
-        this.clamp(node, "w", resolve("w", size.w), path),
-        this.clamp(node, "h", resolve("h", size.h), path),
-      );
+      return leaf(width, this.clamp(node, "h", resolve("h", size.h), path));
     }
 
-    // Box ou Image : intrinsèque (0, 0), ratio dérivé d'un axe résolu.
+    // Box ou Image : intrinsèque (0, 0). Le ratio dérive l'autre axe de la
+    // taille utilisée, bornes comprises, et l'axe dérivé est borné à son tour.
     const resolved = (axis: Axis): boolean =>
       this.mode(node, axis, forced).kind !== "hug";
-    let w = resolve("w", 0);
-    let h = resolve("h", 0);
+    let w = this.clamp(node, "w", resolve("w", 0), path);
+    let h = this.clamp(node, "h", resolve("h", 0), path);
     if (
       node.type === "Image" &&
       node.props.ratio !== undefined &&
       resolved("w") !== resolved("h")
     ) {
       const [rw, rh] = node.props.ratio;
-      if (resolved("w")) h = (w * rh) / rw;
-      else w = (h * rw) / rh;
+      if (resolved("w")) h = this.clamp(node, "h", (w * rh) / rw, path);
+      else w = this.clamp(node, "w", (h * rw) / rh, path);
     }
-    return leaf(this.clamp(node, "w", w, path), this.clamp(node, "h", h, path));
+    return leaf(w, h);
   }
 
   private measureStack(
@@ -317,15 +361,27 @@ class Layout {
     const p = node.props;
     const main: Axis = p.dir === "h" ? "w" : "h";
     const cross = other(main);
-    const max = {
-      w: this.available(node, "w", maxW, path),
-      h: this.available(node, "h", maxH, path),
-    };
+    // L'espace que le parent propose. Sur un axe hug, les min/max du Stack ne
+    // bornent que sa propre taille, pas ce qu'il propose à ses enfants : sous
+    // un max plus petit, le contenu déborde (§5.2, comme en CSS).
+    const max = { w: maxW, h: maxH };
     const [pt, pr, pb, pl] = this.pad(p.pad, path);
     const padding = { w: pl + pr, h: pt + pb };
+    // Sur un axe où le Stack est fixed ou fill, sa taille ne dépend pas des
+    // enfants : elle est connue d'abord, et c'est elle qui les contraint (§5.2).
+    const own = (axis: Axis): number | undefined => {
+      const m = this.mode(node, axis, forced);
+      if (m.kind === "hug") return undefined;
+      const value =
+        m.kind === "fixed"
+          ? this.length(m.value, path)
+          : this.fillSize(max[axis], axis, path);
+      return this.outer(node, axis, value, padding[axis], path);
+    };
+    const outerSize = { w: own("w"), h: own("h") };
     const innerMax = {
-      w: Math.max(0, max.w - padding.w),
-      h: Math.max(0, max.h - padding.h),
+      w: Math.max(0, (outerSize.w ?? max.w) - padding.w),
+      h: Math.max(0, (outerSize.h ?? max.h) - padding.h),
     };
     if (p.overflow === "scroll") innerMax[main] = Number.POSITIVE_INFINITY;
     const gap = p.gap === undefined ? 0 : (this.token(p.gap, path) ?? 0);
@@ -383,7 +439,6 @@ class Layout {
       else sHug += mainOf(measuredChild);
     });
 
-    let sFill = 0;
     if (fills.length > 0) {
       let reste = Math.max(0, disponibleMain - sFixed - sHug);
       // Une contrainte infinie n'est définitive que si elle vient de scroll (ADR-008).
@@ -394,88 +449,137 @@ class Layout {
         for (const i of fills) {
           const child = node.children[i];
           const childPath = `${path}/${child?.id ?? `${child?.type ?? "?"}[${String(i)}]`}`;
-          this.errors.push(
-            irError(
-              "E007",
-              childPath,
-              `${main}: fill sur l'axe de défilement de son parent scroll (ADR-008) : mettre fixed ou hug, ou retirer scroll du parent.`,
-            ),
+          this.report(
+            "E007",
+            childPath,
+            `${main}: fill sur l'axe de défilement de son parent scroll (ADR-008) : mettre fixed ou hug, ou retirer scroll du parent.`,
           );
         }
         reste = 0;
       }
-      // Gel des enfants bornés par leur min/max, comme flexbox.
+      // Sur un axe main hug, il n'y a pas d'espace libre à répartir : un
+      // enfant fill vaut sa base, zéro (§5.2, comme `flex-basis: 0`). Le cas
+      // n'existe que sous l'exception de la règle 1 de §6, parent étiré.
+      if (outerSize[main] === undefined) reste = 0;
+      // Base d'un enfant fill : le padding qu'il porte sur l'axe principal,
+      // incompressible et hors de l'espace à répartir (§5.2, `flex-basis: 0`).
+      const base = new Map<number, number>();
+      for (const i of fills) {
+        const child = node.children[i];
+        if (child?.type !== "Stack") {
+          base.set(i, 0);
+          continue;
+        }
+        const [ct, cr, cb, cl] = this.pad(
+          child.props.pad,
+          `${path}/${child.id ?? `Stack[${String(i)}]`}`,
+        );
+        base.set(i, main === "w" ? cl + cr : ct + cb);
+      }
+      let bases = 0;
+      for (const v of base.values()) bases += v;
+      reste = Math.max(0, reste - bases);
+
+      // Résolution des tailles flexibles, comme flexbox : à chaque tour, on ne
+      // gèle que les enfants dont la violation va dans le sens de la violation
+      // totale, et les autres se repartagent ce qui reste (§5.2, étape 3).
       const frozen = new Map<number, number>();
       for (let round = 0; round <= fills.length; round++) {
         const open = fills.filter((i) => !frozen.has(i));
         if (open.length === 0) break;
-        let frozenSum = 0;
-        for (const v of frozen.values()) frozenSum += v;
-        const part = Math.max(0, reste - frozenSum) / open.length;
-        let newlyFrozen = false;
+        let grown = 0;
+        for (const [i, v] of frozen) grown += v - (base.get(i) ?? 0);
+        const part = Math.max(0, reste - grown) / open.length;
+        const violations = new Map<number, number>();
+        let total = 0;
         for (const i of open) {
           const child = node.children[i];
           if (child === undefined) continue;
-          mainConstraint[i] = part;
+          const constraint = (base.get(i) ?? 0) + part;
+          mainConstraint[i] = constraint;
           const measuredChild = measureChild(
             i,
-            part,
+            constraint,
             innerMax[cross],
             provisional(child),
           );
           measured[i] = measuredChild;
-          if (Math.abs(mainOf(measuredChild) - part) > EPSILON) {
-            frozen.set(i, mainOf(measuredChild));
-            newlyFrozen = true;
-          }
+          const violation = mainOf(measuredChild) - constraint;
+          violations.set(i, violation);
+          total += violation;
         }
-        if (!newlyFrozen) break;
+        if ([...violations.values()].every((v) => Math.abs(v) <= EPSILON))
+          break;
+        for (const [i, violation] of violations) {
+          const matches =
+            Math.abs(total) <= EPSILON ||
+            (total > 0 ? violation > EPSILON : violation < -EPSILON);
+          if (matches)
+            frozen.set(
+              i,
+              mainOf(measured[i] ?? { node, key, w: 0, h: 0, children: [] }),
+            );
+        }
       }
-      for (const i of fills)
-        sFill += mainOf(measured[i] ?? { node, key, w: 0, h: 0, children: [] });
     }
 
-    const content = sFixed + sHug + sFill + gaps;
-    const selfMain = this.mode(node, main, forced);
-    let mainSize =
-      selfMain.kind === "fixed"
-        ? this.length(selfMain.value, path)
-        : selfMain.kind === "hug"
-          ? content + padding[main]
-          : this.fillSize(max[main], main, path);
-    const selfCross = this.mode(node, cross, forced);
     const crossContent = measured.reduce(
       (acc, m) => Math.max(acc, crossOf(m)),
       0,
     );
-    let crossSize =
-      selfCross.kind === "fixed"
-        ? this.length(selfCross.value, path)
-        : selfCross.kind === "hug"
-          ? crossContent + padding[cross]
-          : this.fillSize(max[cross], cross, path);
-    mainSize = this.clamp(node, main, mainSize, path);
-    crossSize = this.clamp(node, cross, crossSize, path);
-    const innerCross = Math.max(0, crossSize - padding[cross]);
+    const crossSize =
+      outerSize[cross] ??
+      this.outer(
+        node,
+        cross,
+        crossContent + padding[cross],
+        padding[cross],
+        path,
+      );
+    // Contrainte cross définitive : la taille utilisée du Stack, bornes
+    // comprises. Un enfant qui se dimensionne seul n'y descend pas sous son
+    // minimum de contenu et déborde alors, comme en CSS (§5.2).
+    const usedCross = Math.max(0, crossSize - padding[cross]);
 
-    // Étape 6 : enfants fill sur cross, ou hug étirés, remesurés comme fill sur cross.
+    // Étape 6 : les enfants sont remesurés avec cette contrainte — en fill
+    // s'ils sont fill ou étirés par crossAlign: stretch, dans leur propre mode
+    // sinon.
     node.children.forEach((child, i) => {
       if (child.type === "Icon") return;
       const cm = this.mode(child, cross);
       const stretch =
         cm.kind === "hug" && (p.crossAlign ?? "start") === "stretch";
-      if (cm.kind === "fill" || stretch) {
-        measured[i] = measureChild(
-          i,
-          mainConstraint[i] ?? Number.POSITIVE_INFINITY,
-          innerCross,
-          { axis: cross, mode: "fill" },
-        );
-      }
+      const forcedCross: Forced | undefined =
+        cm.kind === "fill" || stretch
+          ? { axis: cross, mode: "fill" }
+          : undefined;
+      if (
+        forcedCross === undefined &&
+        Math.abs(usedCross - innerMax[cross]) <= EPSILON
+      )
+        return;
+      measured[i] = measureChild(
+        i,
+        mainConstraint[i] ?? Number.POSITIVE_INFINITY,
+        usedCross,
+        forcedCross,
+      );
     });
+
+    // La taille main vient des tailles obtenues après la remesure : sur cross,
+    // un enfant plus large a moins de lignes, donc une taille main plus petite.
+    const content = measured.reduce((acc, m) => acc + mainOf(m), 0) + gaps;
+    const mainSize =
+      outerSize[main] ??
+      this.outer(node, main, content + padding[main], padding[main], path);
 
     const [w, h] = main === "w" ? [mainSize, crossSize] : [crossSize, mainSize];
     return { node, key, w, h, children: measured };
+  }
+
+  /** Mode d'un axe de la racine, pour la contrainte que `layout` lui donne. */
+  rootMode(node: Node, axis: Axis): Size["kind"] {
+    return this.mode(node, axis).kind;
   }
 
   // -- arrange ----------------------------------------------------------------
@@ -519,7 +623,12 @@ class Layout {
 
     for (const child of m.children) {
       let crossPos = padStart[cross];
-      switch (p.crossAlign ?? "start") {
+      // Un enfant fill sur cross a déjà reçu l'espace : il commence au
+      // padding, même si un min/max l'a ramené à une taille plus petite.
+      const filled =
+        child.node.type !== "Icon" &&
+        this.mode(child.node, cross).kind === "fill";
+      switch (filled ? "start" : (p.crossAlign ?? "start")) {
         case "center":
           crossPos += (innerCross - crossOf(child)) / 2;
           break;

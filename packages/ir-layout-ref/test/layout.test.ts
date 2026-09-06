@@ -236,7 +236,7 @@ describe("texte (spec §5.3, mesure monospace)", () => {
     });
   });
 
-  it("un Text hug se replie à la largeur de son parent, maxLines tronque", () => {
+  it("un Text hug qui se replie prend la largeur offerte (ADR-011), maxLines tronque", () => {
     const g = run(
       stack("root", { dir: "v", w: fill, h: fill }, [
         text("t", "aaaa bbbb cccc"),
@@ -244,8 +244,16 @@ describe("texte (spec §5.3, mesure monospace)", () => {
       ]),
       { w: 100, h: 200 },
     );
-    expect(rect(g, "t")).toStrictEqual({ x: 0, y: 0, w: 9 * 9.6, h: 48 });
-    expect(rect(g, "u")).toStrictEqual({ x: 0, y: 48, w: 9 * 9.6, h: 24 });
+    expect(rect(g, "t")).toStrictEqual({ x: 0, y: 0, w: 100, h: 48 });
+    expect(rect(g, "u")).toStrictEqual({ x: 0, y: 48, w: 100, h: 24 });
+  });
+
+  it("un Text hug qui tient sur une ligne garde la largeur de son texte", () => {
+    const g = run(
+      stack("root", { dir: "v", w: fill, h: fill }, [text("t", "aaaa")]),
+      { w: 100, h: 200 },
+    );
+    expect(rect(g, "t")).toStrictEqual({ x: 0, y: 0, w: 4 * 9.6, h: 24 });
   });
 
   it("un Text hug sur l'axe principal d'un Stack horizontal se mesure en une ligne", () => {
