@@ -1,5 +1,7 @@
 import * as fc from "fast-check";
 
+import { normalize } from "../src/index.js";
+
 import type {
   BoxNode,
   Content,
@@ -20,9 +22,10 @@ import type {
  * Générateur `genIR` (spec §8.1) : arbres bien typés, profondeur ≤ 5,
  * largeur ≤ 4, tokens tirés du design system de fixture.
  *
- * Il produit des arbres *bien typés*, pas encore en forme normale : la forme
- * normale `N` arrive en T3 et s'appliquera par composition. Les `#id`
- * présents sont rendus uniques après génération.
+ * `genRawIR` produit des arbres bien typés quelconques, dont les `#id`
+ * présents sont rendus uniques ; `genIR` les passe par la forme normale
+ * `N`, comme le §8.1 le demande. Les tests de `N` elle-même tirent de
+ * `genRawIR`.
  */
 
 /** Tokens référençables de `fixtures/design-system/tokens.json`. */
@@ -323,6 +326,10 @@ function withUniqueIds(screen: Screen): Screen {
 
 export const genNode: fc.Arbitrary<Node> = tree.node;
 
-export const genIR: fc.Arbitrary<Screen> = fc
+export const genRawIR: fc.Arbitrary<Screen> = fc
   .record({ name: genIdent, root: genNode }, REC)
   .map(withUniqueIds);
+
+export const genIR: fc.Arbitrary<Screen> = genRawIR.map(
+  (screen) => normalize(screen).screen,
+);

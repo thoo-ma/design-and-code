@@ -1,16 +1,16 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
-import { parse, print } from "../src/index.js";
+import { normalize, parse, print } from "../src/index.js";
 import type { IRError, Screen } from "../src/index.js";
 
-import { genIR } from "./gen.js";
+import { genIR, genRawIR } from "./gen.js";
 
 const show = (errors: readonly IRError[]): string =>
   errors.map((e) => `${e.code} ${e.path} : ${e.message}`).join("\n");
 
 describe("loi 0 — syntaxe (spec §7)", () => {
-  it("parse(print(ir)) ≡ ir sur 1000 arbres générés", () => {
+  it("parse(print(ir)) ≡ ir sur 1000 arbres en forme normale", () => {
     fc.assert(
       fc.property(genIR, (ir: Screen) => {
         const text = print(ir);
@@ -22,6 +22,17 @@ describe("loi 0 — syntaxe (spec §7)", () => {
         if (back.ok) expect(back.value.screen).toStrictEqual(ir);
       }),
       { numRuns: 1000 },
+    );
+  });
+
+  it("parse(print(x)) = x aussi hors forme normale : print n'invente ni ne perd rien", () => {
+    fc.assert(
+      fc.property(genRawIR, (raw: Screen) => {
+        const back = parse(print(raw));
+        expect(back.ok).toBe(true);
+        if (back.ok) expect(back.value.screen).toStrictEqual(raw);
+      }),
+      { numRuns: 300 },
     );
   });
 
@@ -46,6 +57,36 @@ describe("loi 0 — syntaxe (spec §7)", () => {
         for (const line of text.split("\n")) {
           const lead = line.length - line.trimStart().length;
           expect(lead % 2).toBe(0);
+        }
+      }),
+      { numRuns: 300 },
+    );
+  });
+});
+
+describe("loi 4 — normalisation, partie idempotence (spec §7)", () => {
+  it("N(N(x)) ≡ N(x), sans nouvel avertissement au second passage", () => {
+    fc.assert(
+      fc.property(genRawIR, (raw: Screen) => {
+        const once = normalize(raw);
+        const twice = normalize(once.screen);
+        expect(twice.screen).toStrictEqual(once.screen);
+        expect(twice.warnings).toStrictEqual([]);
+      }),
+      { numRuns: 1000 },
+    );
+  });
+
+  it("N commute avec parse ∘ print : N(parse(print(x))) ≡ parse(print(N(x)))", () => {
+    fc.assert(
+      fc.property(genRawIR, (raw: Screen) => {
+        const left = parse(print(raw));
+        const right = parse(print(normalize(raw).screen));
+        expect(left.ok && right.ok).toBe(true);
+        if (left.ok && right.ok) {
+          expect(normalize(left.value.screen).screen).toStrictEqual(
+            right.value.screen,
+          );
         }
       }),
       { numRuns: 300 },
