@@ -1,4 +1,4 @@
-/* Généré depuis tokens.json + tokens.dark.json. Golden test du compilateur de tokens, cible CSS. */
+/* Généré depuis tokens.json + tokens.dark.json par le compilateur de tokens, cible CSS. Ne pas éditer. */
 /* Nommage : $groupe.sous.nom  ->  --groupe-sous-nom. Les primitives (palette, font) ne sont pas émises. */
 
 :root {

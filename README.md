@@ -16,7 +16,7 @@ Un langage intermédiaire pour les interfaces, dont le design et le code sont de
 
 ## État
 
-Spec v0.1 écrite et précisée au fil des tâches ; questions ouvertes 1, 2, 3, 5, 7 et 8 tranchées (ADR 003 à 007), 4 et 6 restent ouvertes. T0 (bootstrap), T1 (AST, erreurs, schémas zod), T2 (parse, print, loi 0), T3 (forme normale, loi 4 idempotence) et T4 (design system, typecheck) faits dans `ir-core`. Tâche courante : T5.
+Spec v0.1 écrite et précisée au fil des tâches ; questions ouvertes 1, 2, 3, 5, 7 et 8 tranchées (ADR 003 à 007), 4 et 6 restent ouvertes. T0 (bootstrap), T1 (AST, erreurs, schémas zod), T2 (parse, print, loi 0), T3 (forme normale, loi 4 idempotence) et T4 (design system, typecheck) faits dans `ir-core` ; T5 (compilateur de tokens) fait dans `ir-backend-css` et `ir-backend-swiftui`. Tâche courante : T6.
 
 ## Structure
 

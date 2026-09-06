@@ -51,6 +51,9 @@ importers:
         specifier: workspace:*
         version: link:../ir-core
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.3
       fast-check:
         specifier: 'catalog:'
         version: 4.9.0
@@ -67,6 +70,9 @@ importers:
         specifier: workspace:*
         version: link:../ir-core
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.3
       fast-check:
         specifier: 'catalog:'
         version: 4.9.0

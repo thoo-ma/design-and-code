@@ -1,3 +1,3 @@
-// T0 : module vide, aucun comportement. `export {}` suffit à en faire un
-// module ES (requis par isolatedModules / verbatimModuleSyntax).
-export {};
+// ir-backend-css : compilateur de tokens (T5). Compile et decompile de l'IR
+// vers React + CSS Modules viendront en T7 et T8.
+export * from "./tokens.js";

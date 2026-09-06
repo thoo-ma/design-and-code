@@ -6,3 +6,4 @@
  */
 export * from "./fixture.js";
 export * from "./gen.js";
+export * from "./gen-tokens.js";
