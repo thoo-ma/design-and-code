@@ -32,4 +32,4 @@ Ce fichier suit le format DTCG dans sa forme récente : `$type` et `$value`, dim
 
 - Pas de tokens de composants (`button.primary.bg`, etc.). La couche composants est hors scope v0 ; quand elle arrivera, ses tokens seront des alias vers les sémantiques ci-dessus, dans un fichier séparé.
 - Pas de tokens de mouvement (durées, easings). Hors scope v0.
-- Pas de troisième breakpoint (question ouverte 7 de la spec).
+- Pas de troisième breakpoint : deux en v0 (ADR-003).
