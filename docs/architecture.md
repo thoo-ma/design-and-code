@@ -8,106 +8,71 @@ Les diagrammes sont en Mermaid pour la même raison que l'IR est textuelle : une
 
 ## 1. La carte d'ensemble
 
-Trois mondes. Au centre, le langage ; à gauche, les outils de design ; à droite, le code. Le design et le code ne se parlent jamais directement : tout passe par l'IR (ADR-001). Les flèches portent le nom de leur fonction (spec §7) et, quand il y en a une, la loi qui les contraint.
+L'axe va du fichier de design aux pixels. Sur cet axe, les représentations successives ; entre elles, les passes qui les traduisent. Chaque traduction vers l'avant a sa réciproque, dessinée en pointillé, et c'est l'aller-retour — pas la flèche seule — qui porte la loi (spec §7).
 
 ```mermaid
-flowchart LR
-  figma["Figma<br/>arbre auto-layout"]
-  dom["Page web<br/>DOM sérialisé"]
+flowchart TB
+  pen(["Penpot"])
+  d("fichier de design<br/>Figma · DOM sérialisé")
+  t("texte .ir")
+  a("AST")
+  n("AST en forme normale")
+  c("code généré<br/>React + CSS Modules · SwiftUI")
+  comp(["Compose"])
+  gr("géométrie de référence")
+  gb("géométrie mesurée")
 
-  ir["L'IR<br/>Login.ir · AST<br/>forme normale N"]
+  imp["import_D"]
+  par["parse"]
+  nrm["N · L4"]
+  cmp["compile_B"]
+  lay["layout()"]
+  geo["geometry_B"]
 
-  web["React + CSS Modules<br/>Login.gen.tsx<br/>Login.gen.module.css"]
-  swift["SwiftUI<br/>LoginLayout.gen.swift"]
+  pen -.-> d
+  d --> imp --> n
+  t --> par --> a --> nrm --> n
+  n --> cmp --> c
+  c -.-> comp
+  n --> lay --> gr
+  c --> geo --> gb
 
-  gref["geometry_ref<br/>ir-layout-ref"]
-  gcss["geometry_css<br/>Chromium"]
+  n -. "export_D · referme L1" .-> d
+  a -. "print · referme L0" .-> t
+  c -. "decompile_B · referme L2" .-> n
+  gr -. "L3 — à 1 u près" .-> gb
 
-  figma -- "import_figma · L1" --> ir
-  ir -. "export_figma · L1" .-> figma
-  dom -- "import_dom" --> ir
-  ir -- "parse · print · L0" --> ir
-
-  ir -- "compile_css · L2" --> web
-  web -- "decompile_css · L2" --> ir
-  ir -- "compile_swiftui · L2" --> swift
-  swift -- "decompile_swiftui · L2" --> ir
-
-  ir -- "layout()" --> gref
-  web -- "getBoundingClientRect" --> gcss
-  gref -. "L3 — à 1 u près" .-> gcss
-
-  classDef coeur fill:#dbeafe,stroke:#2563eb,color:#16314f
+  classDef repr fill:#dbeafe,stroke:#2563eb,color:#16314f
   classDef externe fill:#f3e8ff,stroke:#9333ea,color:#3b1160
   classDef cible fill:#dcfce7,stroke:#16a34a,color:#14532d
   classDef mesure fill:#fef3c7,stroke:#d97706,color:#4a2c05
-  class ir coeur
-  class figma,dom externe
-  class web,swift cible
-  class gref,gcss mesure
+  classDef passe fill:#f8fafc,stroke:#64748b,color:#1e293b
+  classDef satellite fill:#f1f5f9,stroke:#94a3b8,stroke-dasharray:4 4,color:#475569
+  class t,a,n repr
+  class d externe
+  class c cible
+  class gr,gb mesure
+  class imp,par,nrm,cmp,lay,geo passe
+  class pen,comp satellite
 ```
 
-Légende : bleu, l'IR et ce qui la manipule (`ir-core`) — violet, les artefacts extérieurs que le projet ne possède pas — vert, le code généré — ambre, les géométries, qui doivent tomber d'accord.
+Légende : en couleur, les représentations — bleu pour celles du langage, violet pour l'artefact de design que le projet ne possède pas, vert pour le code généré, ambre pour les géométries. En blanc, les passes. En pointillé, les cibles que la spec nomme sans les couvrir en v0 : Penpot (§8.4, importeur direct, terrain de test hors ligne pour la loi 1) et Compose (§14, backend « plus tard »).
 
 Ce qu'il faut y lire :
 
-- **Le centre est un col.** Toute traduction passe par l'IR. Il n'existe aucune flèche Figma → React : ce serait un exporteur de plus, sans loi pour le contraindre (ADR-001).
-- **Chaque aller-retour est une loi.** `parse`/`print` referment L0, `import`/`export` referment L1, `compile`/`decompile` referment L2. Un backend ou un importeur qui n'a que la moitié de son couple n'est pas testable — c'est pourquoi un décompilateur n'est pas une commodité mais la condition de l'oracle.
-- **La forme normale est dans le nœud central, pas sur une flèche.** L4 dit que `N` commute avec toutes les autres opérations : toute comparaison, dans les lois comme dans les diffs, se fait sur `N(ir)`. C'est ce qui donne un sens à `≡`.
-- **La géométrie est à part.** Elle n'est pas une projection de l'IR mais son *observation* : `ir-layout-ref` dit ce que le layout doit valoir, le backend dit ce qu'il vaut, et L3 exige qu'ils s'accordent à 1 u. Le côté SwiftUI est symétrique (XCTest et `GeometryReader` au lieu de Chromium et `getBoundingClientRect`) ; le §4 déplie le côté CSS, seul monté à ce jour.
+- **La forme normale est le vrai col.** Trois flèches y arrivent, et ce n'est pas un hasard : les importeurs et les décompilateurs sortent directement en forme normale (spec §6, dernier paragraphe), et `compile_B` normalise son entrée parce qu'il a besoin des identifiants de la règle 6 (spec §7, L4). Personne ne travaille sur l'AST brut, sauf `parse` et `print`.
+- **Un aller simple ne se teste pas.** `parse`/`print` referment L0, `import_D`/`export_D` referment L1, `compile_B`/`decompile_B` referment L2. Un backend qui n'aurait que `compile_B` produirait du code sans qu'aucune loi ne dise ce qui s'y est perdu — c'est pourquoi un décompilateur n'est pas une commodité mais la condition de l'oracle.
+- **Le fichier du dépôt est celui d'une forme normale.** `print` rend le texte canonique de n'importe quel AST, mais ce qui est commité est `print(N(parse(s)))`, en trois temps (spec §7, L0). Le `.ir` versionné est donc toujours normal, et le golden test d'`examples/` le vérifie.
+- **La géométrie n'est pas une projection mais une observation.** `ir-layout-ref` dit ce que le layout doit valoir, le backend dit ce qu'il vaut, et L3 exige qu'ils s'accordent à 1 u. Le côté SwiftUI est symétrique (XCTest et `GeometryReader` au lieu de Chromium et `getBoundingClientRect`) ; le §4 déplie le côté CSS.
+- **Ce que l'axe ne montre pas, parce qu'il n'existe pas.** Il n'y a aucune représentation intermédiaire entre la forme normale et le code généré : `compile_B` est une seule passe, qui va de l'IR à React ou à SwiftUI d'un coup (spec §11.1 et §11.2). C'est ce qui met tout le poids de la vérification sur L2 et L3, faute d'étapes plus petites à contraindre séparément.
 
-**Note sur `export_figma`.** La loi 1 s'écrit `import_D(export_D(ir)) ≡ ir` et suppose donc un exporteur. Aucun package de la table de `CLAUDE.md` ne le porte : il n'y a que `ir-import-figma`, et T12 teste L1 « sur fixtures JSON, sans Figma ». La flèche est dessinée en pointillé parce que la loi la réclame ; le package qui la portera reste à nommer. À trancher avant T12, par un ADR ou une ligne de plus dans la table des packages — pas ici.
+**Note sur `export_D`.** La loi 1 s'écrit `import_D(export_D(ir)) ≡ ir` et suppose donc un exporteur. Aucun package de la table de `CLAUDE.md` ne le porte : il n'y a que `ir-import-figma`, et T12 teste L1 « sur fixtures JSON, sans Figma ». La flèche est dessinée parce que la loi la réclame ; le package qui la portera reste à nommer. À trancher avant T12, par un ADR ou une ligne de plus dans la table des packages — pas ici.
 
 ---
 
 ## 2. Les cinq lois
 
 Les lois sont l'oracle du projet (spec §7). Quatre sont des allers-retours qui doivent être l'identité sur la forme normale ; L3 est une comparaison de deux mesures.
-
-```mermaid
-flowchart TB
-  subgraph sl0["L0 — syntaxe"]
-    direction LR
-    a0["ir"] -- "print" --> b0["texte .ir"]
-    b0 -- "parse" --> c0["ir"]
-  end
-
-  subgraph sl1["L1 — design"]
-    direction LR
-    a1["ir"] -- "export_D" --> b1["fichier de design"]
-    b1 -- "import_D" --> c1["ir"]
-  end
-
-  subgraph sl2["L2 — code"]
-    direction LR
-    a2["ir"] -- "compile_B" --> b2["zone générée"]
-    b2 -- "decompile_B" --> c2["ir"]
-  end
-
-  subgraph sl3["L3 — géométrie"]
-    direction LR
-    a3["ir"] -- "geometry_ref" --> b3["rectangles"]
-    a3 -- "compile_B puis geometry_B" --> d3["rectangles"]
-    b3 -. "≤ 1 u" .-> d3
-  end
-
-  subgraph sl4["L4 — normalisation"]
-    direction LR
-    a4["ir"] -- "O puis N" --> b4["ir"]
-    a4 -- "N puis O" --> c4["ir"]
-    b4 -. "les deux sont ≡" .-> c4
-  end
-
-  sl0 ~~~ sl1 ~~~ sl2 ~~~ sl3 ~~~ sl4
-
-  classDef loi fill:#e0f2fe,stroke:#0284c7,color:#0c3a52
-  class a0,b0,c0,a1,b1,c1,a2,b2,c2,a3,b3,d3,a4,b4,c4 loi
-  style sl0 fill:none,stroke:#94a3b8
-  style sl1 fill:none,stroke:#94a3b8
-  style sl2 fill:none,stroke:#94a3b8
-  style sl3 fill:none,stroke:#94a3b8
-  style sl4 fill:none,stroke:#94a3b8
-```
 
 | Loi | Énoncé | Ce qu'elle démontre | Où vit son test |
 |---|---|---|---|
@@ -149,7 +114,7 @@ Ce qu'il faut y lire :
 
 - **Le typecheck a besoin du design system.** Sans lui, on ne peut pas savoir qu'un `$color.text.primary` existe ni qu'il est référençable. C'est pourquoi `E002` naît là et pas au parse.
 - **`N` vient après le typecheck, jamais avant.** `N` est totale sur un AST bien typé (spec §6) : elle ne peut pas échouer, elle rend l'arbre normalisé et ses avertissements.
-- **`print` ne normalise pas.** Le texte commité est `print(N(parse(s)))`, en trois temps. C'est exactement l'énoncé de L0.
+- **`print` ne normalise pas.** C'est l'ordre du schéma — typecheck, puis `N`, puis `print` — qui rend normal le fichier commité, pas `print` lui-même (§1).
 - **Le JSON est dérivé.** Il est produit par `parse` et validé par les schémas zod, jamais édité à la main (ADR-006).
 
 Les codes qui naissent hors de `ir-core` sont posés sur les nœuds correspondants du §1 : `E003` (construction non représentable) au décompilateur et aux importeurs, `E008` (frames de breakpoints différentes) aux importeurs, `W002` (valeur arrondie) au mode tolérant de l'import Figma. `E002` et `E010` reviennent aussi dans les backends, qui relisent le design system pour compiler les tokens.
@@ -238,29 +203,16 @@ Certains fichiers ne sont dans aucune des deux zones parce qu'ils ne dépendent 
 
 ## 6. Le dépôt
 
-Six packages. Une flèche va du dépendant vers sa dépendance.
+Six packages : `ir-core`, et cinq qui en dépendent.
 
-```mermaid
-flowchart TB
-  layref["ir-layout-ref<br/>sémantique du layout — spec §5"] --> core
-  bkcss["ir-backend-css<br/>compile + decompile React/CSS"] --> core
-  bkswift["ir-backend-swiftui<br/>compile + decompile SwiftUI"] --> core
-  impfigma["ir-import-figma<br/>JSON du plugin → IR"] --> core
-  impdom["ir-import-dom<br/>DOM sérialisé → IR"] --> core
-  core["ir-core<br/>AST · parse · print · typecheck · N"] --> zod["zod<br/>seule dépendance runtime"]
-  bkcss -. "devDependency — loi 3 seulement" .-> layref
-
-  classDef coeur fill:#dbeafe,stroke:#2563eb,color:#16314f
-  classDef ref fill:#fef3c7,stroke:#d97706,color:#4a2c05
-  classDef cible fill:#dcfce7,stroke:#16a34a,color:#14532d
-  classDef externe fill:#f3e8ff,stroke:#9333ea,color:#3b1160
-  classDef ext fill:#f1f5f9,stroke:#64748b,color:#1e293b
-  class core coeur
-  class layref ref
-  class bkcss,bkswift cible
-  class impfigma,impdom externe
-  class zod ext
-```
+| Package | Rôle |
+|---|---|
+| `ir-core` | AST, parse, print, typecheck, forme normale |
+| `ir-layout-ref` | sémantique de référence du layout (spec §5) |
+| `ir-backend-css` | compile + decompile React et CSS Modules |
+| `ir-backend-swiftui` | compile + decompile SwiftUI |
+| `ir-import-figma` | JSON du plugin Figma → IR |
+| `ir-import-dom` | DOM sérialisé → IR |
 
 `ir-core` et `ir-layout-ref` sont en fonctions pures, sans I/O. `ir-core` n'a que `zod` en dépendance runtime, et `fast-check` en peer optionnelle pour son générateur `genIR` (`src/testing/`), qu'il offre aux autres packages pour leurs tests de propriétés. `ir-backend-css` ne dépend de `ir-layout-ref` qu'en devDependency : c'est la loi 3 qui les met en présence, pas la compilation.
 

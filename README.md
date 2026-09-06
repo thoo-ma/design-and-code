@@ -75,46 +75,7 @@ La CI (`.github/workflows/ci.yml`) lance les quatre premières vérifications en
 
 ## Structure
 
-Le design et le code ne se parlent jamais directement : tout passe par l'IR. Chaque traduction a sa réciproque, et c'est l'aller-retour qui porte la loi (spec §7).
-
-```mermaid
-flowchart LR
-  figma["Figma<br/>arbre auto-layout"]
-  dom["Page web<br/>DOM sérialisé"]
-
-  ir["L'IR<br/>Login.ir · AST<br/>forme normale N"]
-
-  web["React + CSS Modules<br/>Login.gen.tsx<br/>Login.gen.module.css"]
-  swift["SwiftUI<br/>LoginLayout.gen.swift"]
-
-  gref["geometry_ref<br/>ir-layout-ref"]
-  gcss["geometry_css<br/>Chromium"]
-
-  figma -- "import_figma · L1" --> ir
-  ir -. "export_figma · L1" .-> figma
-  dom -- "import_dom" --> ir
-  ir -- "parse · print · L0" --> ir
-
-  ir -- "compile_css · L2" --> web
-  web -- "decompile_css · L2" --> ir
-  ir -- "compile_swiftui · L2" --> swift
-  swift -- "decompile_swiftui · L2" --> ir
-
-  ir -- "layout()" --> gref
-  web -- "getBoundingClientRect" --> gcss
-  gref -. "L3 — à 1 u près" .-> gcss
-
-  classDef coeur fill:#dbeafe,stroke:#2563eb,color:#16314f
-  classDef externe fill:#f3e8ff,stroke:#9333ea,color:#3b1160
-  classDef cible fill:#dcfce7,stroke:#16a34a,color:#14532d
-  classDef mesure fill:#fef3c7,stroke:#d97706,color:#4a2c05
-  class ir coeur
-  class figma,dom externe
-  class web,swift cible
-  class gref,gcss mesure
-```
-
-`docs/architecture.md` déplie cette carte : les cinq lois et où vivent leurs tests, le pipeline de `ir-core` avec les codes d'erreur posés sur l'étape qui les émet, la loi 3 en détail, les deux zones du code généré, le graphe des packages.
+`docs/architecture.md` est la carte du projet : l'axe qui va du fichier de design aux pixels avec les lois posées sur les flèches qu'elles contraignent, le pipeline de `ir-core` avec les codes d'erreur sur l'étape qui les émet, la loi 3 en détail, les deux zones du code généré.
 
 ```
 docs/            spec, ADR et la carte de l'architecture
