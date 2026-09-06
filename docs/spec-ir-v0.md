@@ -183,7 +183,7 @@ Contenu : littéral (placeholder) ou `slot(nom)`. Taille intrinsèque : celle du
 | `ratio` | `(w, h)` entiers > 0 | aucun |
 | `radius` | `$radius.*` | aucun |
 
-Contenu : littéral (URL ou nom d'asset de placeholder) ou `slot(nom)`. Taille intrinsèque : celle de l'asset si connue, sinon dérivée de `ratio` et de l'autre axe, sinon 0. Le typecheck ne connaît pas les assets : chaque axe d'une `Image` doit donc être résolvable, c'est-à-dire `fixed` ou `fill`, ou dérivé par `ratio` d'un autre axe lui-même `fixed` ou `fill`. Un axe non résolvable, à la base ou à un breakpoint, est une erreur E006.
+Contenu : littéral (URL ou nom d'asset de placeholder) ou `slot(nom)`. Taille intrinsèque : celle de l'asset si connue, sinon dérivée de `ratio` et de l'autre axe, sinon 0. Le typecheck ne connaît pas les assets : chaque axe d'une `Image` doit donc être résolvable, c'est-à-dire `fixed` ou `fill`, ou dérivé par `ratio` d'un autre axe lui-même `fixed` ou `fill`. Un axe non résolvable, à la base ou à un breakpoint, est une erreur E006. Elle s'évalue sur la forme normale : un `fill` éliminé par la règle 1 de §6 peut la révéler, et c'est voulu, ce `fill` n'avait pas de sens.
 
 ### 4.6 Icon
 
