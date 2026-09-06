@@ -9,30 +9,74 @@ Un langage intermédiaire pour les interfaces, dont le design et le code sont de
 1. `docs/adr/001-ir-source-de-verite.md` — pourquoi une IR plutôt que Figma ou le code
 2. `docs/adr/002-adjonction-et-fragment.md` — les lois, et la frontière design/code
 3. `docs/adr/003-layout-dabord.md` — par où on commence
-4. `docs/adr/004-dimensions-litterales.md` à `011-hug-du-texte.md` — les questions tranchées en cours de route
-5. `docs/spec-ir-v0.md` — la spec du langage
-6. `TASKS.md` — le plan de travail
-7. `CLAUDE.md` — le contexte pour les agents
+4. `docs/spec-ir-v0.md` — la spec du langage, qui fait autorité sur tout comportement
+5. `TASKS.md` — le plan de travail
+6. `CLAUDE.md` — le contexte pour les agents
+
+## Décisions
+
+Une décision structurante est un ADR dans `docs/adr/`. Elles ne se contredisent pas : elles se remplacent par un nouvel ADR.
+
+| # | Décision | Tranche |
+|---|---|---|
+| 001 | L'IR est la source de vérité | — |
+| 002 | Adjonction, pas isomorphisme | — |
+| 003 | Le layout comme première couche, un seul backend natif | q7 |
+| 004 | Les dimensions de layout acceptent un littéral, l'espacement et le style exigent un token | q3 |
+| 005 | Le jeu d'icônes est déclaré dans le design system, avec un nom par backend | q5 |
+| 006 | La syntaxe textuelle est canonique, le JSON de l'AST en est dérivé | q2 |
+| 007 | Les identifiants générés sont un hash du chemin | q8 |
+| 008 | Un `fill` sur l'axe de défilement est une erreur | q6 |
+| 009 | La cible web est React avec CSS Modules | q4 |
+| 010 | La bordure est décorative, hors du layout | — |
+| 011 | `hug` sur un Text est la largeur sans repli, bornée par l'espace offert | — |
+
+La colonne « Tranche » renvoie aux questions ouvertes de la spec §13. Les huit sont tranchées ; la q1 (nom et extension du langage) l'a été sans ADR : `.ir` jusqu'au papier. Les ADR-010 et 011 ne répondent à aucune de ces questions : ce sont les lois qui les ont posées, en montrant qu'un backend ne pouvait pas satisfaire la spec telle qu'elle était écrite.
 
 ## État
 
-Spec v0.1 écrite et précisée au fil des tâches ; les huit questions ouvertes de §13 sont tranchées (ADR 003 à 009), et les lois en ont ouvert deux autres, tranchées elles aussi (ADR-010, bordure décorative ; ADR-011, `hug` d'un texte). T0 (bootstrap), T1 (AST, erreurs, schémas zod), T2 (parse, print, loi 0), T3 (forme normale, loi 4 idempotence) et T4 (design system, typecheck) faits dans `ir-core` ; T5 (compilateur de tokens) fait dans `ir-backend-css` et `ir-backend-swiftui` ; T6 (layout de référence, ADR-008) fait dans `ir-layout-ref` ; T7 (compilateur IR → React + CSS Modules, ADR-009), T8 (décompilateur, loi 2 et commutation de la loi 4) et T9 (géométrie CSS par Playwright, loi 3, ADR-010 et ADR-011) faits dans `ir-backend-css`. Tâche courante : T10.
+Spec v0.1 écrite et précisée au fil des tâches. Une ligne par tâche de `TASKS.md` ; la colonne « Loi » dit ce que la tâche démontre de l'oracle (spec §7).
+
+| Tâche | Apport | Package | Loi | État |
+|---|---|---|---|---|
+| T0 | bootstrap du monorepo, CI | — | — | fait |
+| T1 | AST, erreurs typées, schémas zod | `ir-core` | — | fait |
+| T2 | parse et print | `ir-core` | L0 | fait |
+| T3 | forme normale | `ir-core` | L4 (idempotence) | fait |
+| T4 | design system et typecheck | `ir-core` | — | fait |
+| T5 | compilateur de tokens | `ir-backend-css`, `ir-backend-swiftui` | — | fait |
+| T6 | layout de référence (ADR-008) | `ir-layout-ref` | L3 (moitié référence) | fait |
+| T7 | compilateur IR → React + CSS Modules (ADR-009) | `ir-backend-css` | — | fait |
+| T8 | décompilateur | `ir-backend-css` | L2, L4 (commutation) | fait |
+| T9 | géométrie CSS par Playwright (ADR-010, ADR-011) | `ir-backend-css` | L3 (moitié backend) | fait |
+| T10 | importeur DOM | `ir-import-dom` | — | en cours |
+| T11 | backend SwiftUI | `ir-backend-swiftui` | L2, L3 | à faire |
+| T12 | importeur Figma | `ir-import-figma` | L1 | à faire |
+
+Les lois sont énoncées à la spec §7 ; leurs tests de propriété sont dans le `test/laws.test.ts` de `ir-core`, `ir-layout-ref` et `ir-backend-css`.
+
+## Développement
+
+Node ≥ 22.12, pnpm 10.33 (voir `engines` et `packageManager` du `package.json` racine).
+
+```
+pnpm install
+pnpm test           # vitest, tous les packages : lois 0, 2 et 4, golden, propriétés
+pnpm test:geometry  # loi 3 : la page compilée dans Chromium, comparée au layout de référence
+pnpm typecheck      # tsc, un projet par package
+pnpm lint           # eslint
+pnpm format:check   # prettier
+```
+
+`pnpm test:geometry` est à part parce qu'il demande un navigateur : `pnpm --filter ir-backend-css exec playwright install chromium`, ou la variable `IR_CHROMIUM_PATH` si l'environnement en fournit déjà un.
+
+La CI (`.github/workflows/ci.yml`) lance les quatre premières vérifications en matrice sur Node LTS, et la loi 3 dans une tâche à part, qui installe Chromium. Le markdown, la spec, les fixtures et les exemples sont dans `.prettierignore` : ils s'écrivent à la main et ne sont jamais reformatés.
 
 ## Structure
 
 ```
 docs/            spec et ADR
-fixtures/        design system minimal (DTCG) et sorties attendues
-examples/        écrans .ir de référence
+examples/        Login.ir et ses sorties golden : code compilé, géométrie de référence
+fixtures/        design system minimal (DTCG) et sorties attendues du compilateur de tokens
 packages/        ir-core, ir-layout-ref, backends, importeurs
 ```
-
-## Vérifier
-
-```
-pnpm test           lois 0, 2 et 4, golden, propriétés — sans navigateur
-pnpm test:geometry  loi 3 : la page compilée dans Chromium, comparée au layout de référence
-pnpm typecheck && pnpm lint && pnpm format:check
-```
-
-`pnpm test:geometry` demande Chromium : `pnpm --filter ir-backend-css exec playwright install chromium`, ou la variable `IR_CHROMIUM_PATH` si l'environnement en fournit déjà un.

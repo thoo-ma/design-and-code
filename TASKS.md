@@ -4,6 +4,8 @@ Ordre strict. Chaque tâche est un lot de PR. On ne commence pas une tâche tant
 
 Règle transverse : **la spec avant les tests, les tests avant le code**. Une PR qui ajoute du comportement sans test de propriété correspondant est incomplète.
 
+Ce fichier dit ce qu'il y a à faire, pas ce qui est fait : l'avancement se lit dans la table d'état du README.
+
 ---
 
 ## T0 — Bootstrap (aucun comportement)
@@ -18,7 +20,7 @@ Critère de fin : `pnpm -r test` vert sur une PR vide.
 
 Types de l'AST exactement conformes à la spec §3 et §4 : `Screen`, `Node` (union discriminée sur `Stack | Box | Text | Image | Icon`), `Size` (`fixed | hug | fill`), `Token` (typé par groupe), `Override`, `Role`, `Content` (`Literal | Slot`).
 
-Schémas zod correspondants pour la validation de l'AST JSON. Type `IRError` avec code (`E001`…`E008`, `W001`…`W003`), chemin du nœud, position optionnelle, message. Aucun `throw` de string, aucun `any`.
+Schémas zod correspondants pour la validation de l'AST JSON. Type `IRError` avec code (`E001`…`E010`, `W001`…`W003`), chemin du nœud, position optionnelle, message. Aucun `throw` de string, aucun `any`.
 
 Critère de fin : les types compilent, un AST écrit à la main pour `examples/Login.ir` typecheck, chaque code d'erreur est constructible.
 
@@ -116,6 +118,6 @@ Critère de fin : L1 verte. Avec T8, les deux lois de l'ADR-002 sont démontrée
 
 ---
 
-## Questions ouvertes à trancher avant T7
+## Questions ouvertes
 
-Les huit de la spec §13. Les plus urgentes : n° 4 (React + CSS Modules vs HTML pur) bloque T7 ; n° 3 (littéraux autorisés pour `fixed`) bloque T4 ; n° 6 (E007 sur scroll) bloque T6. Chacune donne un ADR.
+Les huit de la spec §13 sont tranchées : ADR-003 à ADR-009, sauf la n° 1 (nom et extension du langage), tranchée sans ADR. Une question qui rouvre donne un nouvel ADR, pas une retouche de celui qui la tranchait.
