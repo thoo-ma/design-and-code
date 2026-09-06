@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { normalize } from "../src/index.js";
 import type { Node, Screen } from "../src/index.js";
 
-import { genRawIR } from "./gen.js";
+import { genRawIR } from "../src/testing/index.js";
 
 /**
  * Oracle indépendant de `normalize` : propriétés résolues d'un nœud à un

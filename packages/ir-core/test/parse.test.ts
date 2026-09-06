@@ -97,6 +97,9 @@ describe("E004 — propriété invalide pour ce type de nœud", () => {
     ["propriété dupliquée", "Box (w: fill, w: hug)"],
     ["mauvais type de valeur", "Box (w: 48)"],
     ["fixed sans argument valide", "Box (w: fixed(hug))"],
+    ["fixed avec un token du mauvais groupe", "Box (w: fixed($space.md))"],
+    ["fixed avec une chaîne", 'Box (w: fixed("48"))'],
+    ["surcharge du breakpoint de base", "Box () @compact(w: fill)"],
     ["dir requis sur Stack", "Stack ()"],
     ["style requis sur Text", `Text (color: $color.text.primary) "x"`],
     [
@@ -181,6 +184,7 @@ describe("ce qui passe", () => {
     "screen S { Box () @expanded() }",
     `screen S { Text (${TEXT_PROPS}) "a\\"b\\\\c\\n" }`,
     "screen S { Box (maxW: 1e3, minW: 0.5) }",
+    "screen S { Box (w: fixed($size.icon.md), minH: $size.hairline) }",
     "screen S { Icon (name: $icon.chevron-right, size: $size.icon.sm, color: $color.accent) }",
     `screen S { Text (${TEXT_PROPS}) "x" @expanded(${TEXT_PROPS}) }`,
   ])("%s", (source) => {

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ScreenSchema } from "../src/index.js";
 import type { Node, Screen } from "../src/index.js";
 
-import { genIR } from "./gen.js";
+import { genIR } from "../src/testing/index.js";
 
 const collectIds = (nodes: readonly Node[], out: string[] = []): string[] => {
   for (const n of nodes) {

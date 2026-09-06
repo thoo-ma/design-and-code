@@ -101,20 +101,6 @@ export function convToken<G extends TokenGroup>(group: G): Converter<Token<G>> {
   };
 }
 
-export const convSize: Converter<Size> = (v) => {
-  if (v.kind === "enum" && (v.name === "hug" || v.name === "fill")) {
-    return good({ kind: v.name });
-  }
-  if (v.kind === "call" && v.name === "fixed") {
-    const [n, ...rest] = v.args;
-    if (n === undefined || rest.length > 0 || n.kind !== "number") {
-      return bad("E004", "fixed attend exactement un nombre, comme fixed(48).");
-    }
-    return good({ kind: "fixed", value: n.value });
-  }
-  return bad("E004", `fixed(n), hug ou fill attendu, trouvé ${showRaw(v)}.`);
-};
-
 export const convLength: Converter<Length> = (v) => {
   if (v.kind === "number") return good(v.value);
   if (v.kind === "token") {
@@ -130,6 +116,24 @@ export const convLength: Converter<Length> = (v) => {
     "E004",
     `un nombre ou un token $size.* est attendu, trouvé ${showRaw(v)}.`,
   );
+};
+
+export const convSize: Converter<Size> = (v) => {
+  if (v.kind === "enum" && (v.name === "hug" || v.name === "fill")) {
+    return good({ kind: v.name });
+  }
+  if (v.kind === "call" && v.name === "fixed") {
+    const [n, ...rest] = v.args;
+    if (n === undefined || rest.length > 0) {
+      return bad(
+        "E004",
+        "fixed attend exactement une longueur, comme fixed(48) ou fixed($size.control).",
+      );
+    }
+    const length = convLength(n);
+    return length.ok ? good({ kind: "fixed", value: length.value }) : length;
+  }
+  return bad("E004", `fixed(n), hug ou fill attendu, trouvé ${showRaw(v)}.`);
 };
 
 export function convEnum<T extends string>(values: readonly T[]): Converter<T> {

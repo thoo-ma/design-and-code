@@ -96,6 +96,15 @@ describe("schéma : ce qui est accepté", () => {
       }),
     ],
     [
+      "fixed avec un token $size.* (ADR-004)",
+      screenOf({
+        ...box,
+        props: {
+          w: { kind: "fixed", value: { group: "size", path: ["icon", "md"] } },
+        },
+      }),
+    ],
+    [
       "surcharge vide",
       screenOf({ ...box, overrides: [{ breakpoint: "expanded", props: {} }] }),
     ],
@@ -204,6 +213,19 @@ describe("schéma : ce qui est rejeté", () => {
     [
       "mode de dimension inconnu",
       screenOf({ ...box, props: { w: { kind: "auto" } } }),
+    ],
+    [
+      "fixed négatif",
+      screenOf({ ...box, props: { w: { kind: "fixed", value: -1 } } }),
+    ],
+    [
+      "fixed avec un token du mauvais groupe",
+      screenOf({
+        ...box,
+        props: {
+          w: { kind: "fixed", value: { group: "space", path: ["md"] } },
+        },
+      }),
     ],
     [
       "fixed sans valeur",

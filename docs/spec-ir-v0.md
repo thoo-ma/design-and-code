@@ -127,13 +127,13 @@ L'AST est un JSON dont la forme est la transcription directe de la grammaire. Il
 
 | Propriété | Type | Défaut | Note |
 |---|---|---|---|
-| `w`, `h` | `fixed(n)` \| `hug` \| `fill` | `hug` | Mode de dimension par axe absolu (largeur, hauteur). n ≥ 0. |
+| `w`, `h` | `fixed(n)` \| `hug` \| `fill` | `hug` | Mode de dimension par axe absolu (largeur, hauteur). n est une longueur : littéral ≥ 0 ou `$size.*` (ADR-004). |
 | `minW`, `maxW`, `minH`, `maxH` | longueur (littéral ≥ 0 ou `$size.*`) | aucun | Contraintes appliquées après résolution du mode. |
 | `role` | `none` \| `heading(n)` \| `button` \| `textfield` \| `list` \| `listitem` \| `image` \| `decorative` | `none` | Sémantique, compilée vers la balise ou le trait d'accessibilité. 1 ≤ n ≤ 6. |
 | `label` | string | aucun | Libellé accessible quand le contenu visuel ne suffit pas. |
 
 Les modes de dimension s'interprètent par rapport au parent :
-- `fixed(n)` : la dimension vaut n, indépendamment du parent et des enfants.
+- `fixed(n)` : la dimension vaut n, littéral ou token `$size.*` résolu par le design system, indépendamment du parent et des enfants.
 - `hug` : la dimension est la taille intrinsèque du contenu (enfants, texte, image).
 - `fill` : la dimension occupe l'espace disponible attribué par le parent. Sans poids en v0 : plusieurs `fill` sur un même axe se partagent l'espace à parts égales.
 
@@ -183,7 +183,7 @@ Contenu : littéral (placeholder) ou `slot(nom)`. Taille intrinsèque : celle du
 | `ratio` | `(w, h)` entiers > 0 | aucun |
 | `radius` | `$radius.*` | aucun |
 
-Contenu : littéral (URL ou nom d'asset de placeholder) ou `slot(nom)`. Taille intrinsèque : celle de l'asset si connue, sinon dérivée de `ratio` et de l'autre axe, sinon 0. Une `Image` sans `fixed`, sans `fill` et sans `ratio` sur au moins un axe est une erreur (E006).
+Contenu : littéral (URL ou nom d'asset de placeholder) ou `slot(nom)`. Taille intrinsèque : celle de l'asset si connue, sinon dérivée de `ratio` et de l'autre axe, sinon 0. Le typecheck ne connaît pas les assets : chaque axe d'une `Image` doit donc être résolvable, c'est-à-dire `fixed` ou `fill`, ou dérivé par `ratio` d'un autre axe lui-même `fixed` ou `fill`. Un axe non résolvable, à la base ou à un breakpoint, est une erreur E006. Elle s'évalue sur la forme normale : un `fill` éliminé par la règle 1 de §6 peut la révéler, et c'est voulu, ce `fill` n'avait pas de sens.
 
 ### 4.6 Icon
 
@@ -199,7 +199,7 @@ Contenu : littéral (URL ou nom d'asset de placeholder) ou `slot(nom)`. Taille i
 
 Un `override` `@expanded(...)` remplace, pour ce breakpoint, les propriétés listées. Seules les propriétés de layout et de style sont surchargeables ; `role`, `label`, le contenu et les enfants ne le sont pas. Un écran est donc un seul arbre, jamais deux arbres par breakpoint : la structure est invariante, seules les propriétés varient. C'est une restriction délibérée de la v0, qui garantit que les lois portent sur un objet unique.
 
-Le breakpoint de base (sans `@`) est `compact`. Un nœud sans surcharge a les mêmes propriétés partout.
+Le breakpoint de base (sans `@`) est `compact`. Un nœud sans surcharge a les mêmes propriétés partout. Surcharger le breakpoint de base (`@compact(...)`) est une erreur E004 : ses propriétés sont celles de base. Un breakpoint absent du design system (`$bp.*`) est une erreur E002 au typecheck.
 
 ---
 
@@ -264,7 +264,7 @@ arrange(node, x, y) :
 
 Deux remarques d'implémentation :
 - Le passage 6 est la seule remesure ; elle est bornée (une fois) et ne fait pas de point fixe. C'est ce qui garantit la terminaison en O(n) et la prévisibilité.
-- Un `fill` sur main dans un Stack `hug` sur main est éliminé par la forme normale (§6), donc l'algorithme ne le rencontre jamais.
+- Un enfant `fill` sur un axe où son parent est `hug` est éliminé par la forme normale (§6, règle 1), sauf si le parent est étiré sur cet axe par son propre parent. L'algorithme rencontre alors ce `fill` avec une contrainte finie sur l'axe (celle de l'axe secondaire du grand-parent à l'étape 2, confirmée par la remesure de l'étape 6) et le remplit : c'est le résultat attendu, `#primary` dans `#actions` en §10.
 
 ### 5.3 Mesure de texte
 
@@ -298,7 +298,7 @@ La forme normale est la sortie de tous les importeurs et de tous les décompilat
 
 Notation : `ir` désigne un document en forme normale. `≡` est l'égalité structurelle après `N`.
 
-**Loi 0 — Syntaxe.** `parse(print(ir)) ≡ ir` et `print(parse(s))` est un texte en forme normale pour tout `s` valide.
+**Loi 0 — Syntaxe.** `parse(print(ir)) ≡ ir`, et `print(parse(s))` est le texte canonique (§3.4) de `parse(s)` pour tout `s` valide. `print` ne normalise pas : le texte commité est `print(N(parse(s)))`.
 
 **Loi 1 — Design.** Pour tout outil de design D disposant d'un importeur et d'un exporteur : `import_D(export_D(ir)) ≡ ir`. Tout ce que l'IR exprime survit à un passage par l'outil de design.
 
@@ -597,7 +597,7 @@ Le seuil 600 est lu dans le design system (`$bp.expanded`), jamais codé en dur 
 
 ### 11.2 IR → SwiftUI
 
-Sous-ensemble de SwiftUI autorisé dans la zone générée : `VStack`, `HStack`, `Spacer`, `Text`, `Image`, `RoundedRectangle`, `ScrollView`, et les modificateurs `.frame`, `.padding`, `.background`, `.overlay`, `.clipped`, `.clipShape`, `.opacity`, `.shadow`, `.font`, `.foregroundStyle`, `.lineLimit`, `.multilineTextAlignment`, `.aspectRatio`, `.accessibilityLabel`, `.accessibilityAddTraits`, `.irNode`. Rien d'autre. La décompilation est un parsing de ce sous-ensemble.
+Sous-ensemble de SwiftUI autorisé dans la zone générée : `VStack`, `HStack`, `AnyLayout` avec `VStackLayout` et `HStackLayout` (uniquement pour un `dir` surchargé), `Spacer`, `Text`, `Image`, `RoundedRectangle`, `ScrollView`, et les modificateurs `.frame`, `.padding`, `.background`, `.overlay`, `.clipped`, `.clipShape`, `.opacity`, `.shadow`, `.font`, `.foregroundStyle`, `.lineLimit`, `.multilineTextAlignment`, `.aspectRatio`, `.accessibilityLabel`, `.accessibilityAddTraits`, `.irNode`. Rien d'autre. La décompilation est un parsing de ce sous-ensemble.
 
 | IR | SwiftUI |
 |---|---|
@@ -628,11 +628,13 @@ Sous-ensemble de SwiftUI autorisé dans la zone générée : `VStack`, `HStack`,
 | `role: button` | `.accessibilityAddTraits(.isButton)` |
 | `role: decorative` | `.accessibilityHidden(true)` |
 | `@expanded(...)` | `@Environment(\.horizontalSizeClass)` et expressions conditionnelles dans les modificateurs |
+| `@expanded(dir: ...)` | `AnyLayout(sizeClass == .compact ? AnyLayout(VStackLayout(...)) : AnyLayout(HStackLayout(...))) { ... }` : `dir` est surchargeable comme toute propriété de layout (§4.7), et c'est la seule construction qui change de conteneur sans dupliquer les enfants |
 
 Motifs que la décompilation doit reconnaître (parce que la propriété du parent est éclatée sur les enfants ou en Spacers) :
 - N enfants portant tous `.frame(maxWidth: .infinity)` sous un `VStack` → `crossAlign: stretch` sur le parent.
 - Spacers en tête / queue / entre → `mainAlign`.
 - `sizeClass == .compact ? a : b` dans un modificateur → surcharge `@expanded`.
+- `AnyLayout(sizeClass == .compact ? … VStackLayout … : … HStackLayout …)` → surcharge `@expanded(dir: …)`.
 
 Approximation assumée (documentée dans le papier) : la size class SwiftUI n'est pas strictement un seuil de largeur. Sur iPhone en portrait elle est toujours `compact` ; sur iPad elle dépend du multitâche. C'est acceptable en v0 parce que le design system ne définit que deux breakpoints. Si un troisième breakpoint apparaît, le backend SwiftUI devra passer à un seuil de largeur explicite via `GeometryReader`.
 
@@ -671,7 +673,7 @@ Le mode tolérant (`--tolerant`) arrondit les valeurs numériques au token le pl
 | Code | Type | Message | Où |
 |---|---|---|---|
 | E001 | erreur | Valeur littérale là où un token est requis | parse, import |
-| E002 | erreur | Token inconnu dans le design system | typecheck |
+| E002 | erreur | Token, icône ou breakpoint inconnu dans le design system, token non référençable, ou type DTCG inattendu pour le groupe | typecheck, compile |
 | E003 | erreur | Construction non représentable dans l'IR | import |
 | E004 | erreur | Propriété invalide pour ce type de nœud | parse |
 | E005 | erreur | Identifiant dupliqué | parse |
@@ -679,6 +681,7 @@ Le mode tolérant (`--tolerant`) arrondit les valeurs numériques au token le pl
 | E007 | erreur | `fill` sous une contrainte infinie (Stack `scroll` sur le même axe, ou racine sans viewport) | layout |
 | E008 | erreur | Frames de breakpoints structurellement différentes | import |
 | E009 | erreur | Erreur de syntaxe (lexème inattendu, fin de fichier prématurée, type de nœud inconnu) | parse |
+| E010 | erreur | Design system invalide (fichier mal formé, alias vers un token inexistant, alias cyclique) | typecheck |
 | W001 | avert. | `fill` dans un parent `hug`, normalisé en `hug` | normalize |
 | W002 | avert. | Valeur arrondie au token le plus proche (mode tolérant) | import |
 | W003 | avert. | Surcharge sans effet, supprimée | normalize |
@@ -689,16 +692,16 @@ Un message d'erreur contient toujours : le code, le chemin du nœud (`root/form/
 
 ## 13. Questions ouvertes
 
-À trancher par ADR avant la première implémentation. Chaque question indique l'option par défaut si personne ne tranche.
+Chaque question est tranchée par un ADR avant la tâche qu'elle bloque, ou notée ici quand elle ne mérite pas d'ADR. État :
 
-1. **Nom du langage et extension.** `.ir` est un nom de travail. Défaut : garder `.ir` jusqu'au papier.
-2. **Syntaxe humaine ou JSON seul.** La syntaxe de §3 est plus lisible et plus proche des langages que les modèles connaissent ; le JSON seul économise un parseur. Défaut : les deux, la syntaxe humaine étant canonique et le JSON dérivé.
-3. **Dimensions littérales.** Faut-il exiger un token `$size.*` même pour `fixed` et `maxW` ? Plus strict, mais impose de tokeniser des valeurs uniques comme 480. Défaut : littéraux autorisés pour `fixed`/`min`/`max`, tokens obligatoires pour `gap`/`pad`.
-4. **Cible web.** React + CSS Modules en v0. Alternative : HTML + CSS pur (plus universel, décompilation plus simple, pas de slots typés). Défaut : React, parce que les slots typés sont l'endroit où la frontière design/code devient vérifiable par le compilateur TypeScript.
-5. **Icônes.** Jeu d'icônes déclaré dans le design system, ou SF Symbols côté iOS avec table de correspondance ? Défaut : jeu déclaré, une table de correspondance par backend, une icône absente est E002.
-6. **Scroll et `fill`.** Un enfant `fill` sur l'axe de scroll d'un Stack `scroll` reçoit une contrainte infinie (E007). Alternative : l'interpréter comme `hug`. Défaut : E007, parce que l'erreur révèle presque toujours une intention floue du design.
-7. **Troisième breakpoint.** Le design system peut-il en déclarer trois (compact, medium, expanded) dès la v0 ? Cela casse la correspondance directe avec les size classes SwiftUI. Défaut : non, deux en v0, et l'ADR-003 le note comme extension.
-8. **Identifiants générés.** Le hash de chemin change quand un frère est inséré avant. Alternative : ids aléatoires figés au premier commit. Défaut : hash de chemin en v0, à revoir quand la préservation des modifications manuelles entrera dans le scope.
+1. **Nom du langage et extension.** `.ir` est un nom de travail. Tranché sans ADR : `.ir` jusqu'au papier.
+2. **Syntaxe humaine ou JSON seul.** Tranché par l'ADR-006 : les deux, la syntaxe humaine étant canonique et le JSON dérivé.
+3. **Dimensions littérales.** Tranché par l'ADR-004 : littéraux ou `$size.*` pour `fixed`, `min`, `max` ; tokens obligatoires pour `gap`, `pad` et le style.
+4. **Cible web.** React + CSS Modules en v0. Alternative : HTML + CSS pur (plus universel, décompilation plus simple, pas de slots typés). Défaut : React, parce que les slots typés sont l'endroit où la frontière design/code devient vérifiable par le compilateur TypeScript. **Ouverte, à trancher avant T7.**
+5. **Icônes.** Tranché par l'ADR-005 : jeu déclaré dans le design system, un nom par backend, E002 si absent.
+6. **Scroll et `fill`.** Un enfant `fill` sur l'axe de scroll d'un Stack `scroll` reçoit une contrainte infinie (E007). Alternative : l'interpréter comme `hug`. Défaut : E007, parce que l'erreur révèle presque toujours une intention floue du design. **Ouverte, à trancher avant T6.**
+7. **Troisième breakpoint.** Tranché par l'ADR-003 : deux breakpoints en v0, l'extension est notée là.
+8. **Identifiants générés.** Tranché par l'ADR-007 : hash du chemin d'indices et du type.
 
 ---
 
