@@ -18,6 +18,8 @@ export interface GeneratedTokens {
 }
 
 const genName = fc.stringMatching(/^[a-z][a-zA-Z0-9]{0,5}$/);
+/** Sous-groupes en majuscule initiale : jamais le nom d'une feuille. */
+const genSubName = fc.stringMatching(/^[A-Z][a-zA-Z0-9]{0,5}$/);
 
 const genDimension = fc
   .integer({ min: 0, max: 1000 })
@@ -53,7 +55,7 @@ export const genTokensJson: fc.Arbitrary<GeneratedTokens> = fc
           .uniqueArray(
             fc.tuple(
               genName,
-              fc.option(genName, { nil: undefined }),
+              fc.option(genSubName, { nil: undefined }),
               group.gen,
             ),
             {
