@@ -68,8 +68,8 @@ function resolved(node: Node, bp: string): Resolved {
   for (const key of KEYS) {
     if (node.type === "Icon" && (key === "w" || key === "h")) continue;
     let v = eff[key] ?? DEFAULTS[key];
-    if (key === "truncate" && v === undefined)
-      v = eff["maxLines"] === undefined ? "none" : "end";
+    if (key === "truncate")
+      v = eff["maxLines"] === undefined ? "none" : (eff["truncate"] ?? "end");
     if (key === "pad") v = reducePad(v);
     if (v !== undefined) out[key] = v;
   }

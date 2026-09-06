@@ -265,9 +265,8 @@ describe("règle 4 — truncate", () => {
     const t = text({ maxLines: 2, truncate: "none" });
     expect(N(t).root).toStrictEqual(t);
   });
-  it("end sans maxLines est porteur de sens", () => {
-    const t = text({ truncate: "end" });
-    expect(N(t).root).toStrictEqual(t);
+  it("end sans maxLines est sans effet, donc omis", () => {
+    expect(N(text({ truncate: "end" })).root).toStrictEqual(text({}));
   });
   it("none sans maxLines reste si une surcharge ajoute maxLines", () => {
     const t = text({ truncate: "none" }, [
