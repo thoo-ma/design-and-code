@@ -15,6 +15,7 @@ export const ERROR_CODES = [
   "E006",
   "E007",
   "E008",
+  "E009",
 ] as const;
 
 export const WARNING_CODES = ["W001", "W002", "W003"] as const;
@@ -78,6 +79,12 @@ export const DIAGNOSTICS: Readonly<Record<DiagnosticCode, DiagnosticSpec>> = {
     summary: "Frames de breakpoints structurellement différentes",
     stages: ["import"],
   },
+  E009: {
+    severity: "error",
+    summary:
+      "Erreur de syntaxe (lexème inattendu, fin de fichier prématurée, type de nœud inconnu)",
+    stages: ["parse"],
+  },
   W001: {
     severity: "warning",
     summary: "`fill` dans un parent `hug`, normalisé en `hug`",
@@ -109,6 +116,22 @@ export interface IRError {
   readonly position?: Position;
   /** Contient toujours une phrase qui dit quoi faire. */
   readonly message: string;
+}
+
+/**
+ * Résultat d'une opération qui peut échouer. Une opération n'échoue jamais
+ * par exception : elle rend `ok: false` avec au moins un diagnostic.
+ */
+export type Result<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly errors: readonly IRError[] };
+
+export function ok<T>(value: T): Result<T> {
+  return { ok: true, value };
+}
+
+export function fail<T = never>(errors: readonly IRError[]): Result<T> {
+  return { ok: false, errors };
 }
 
 export function severityOf(code: DiagnosticCode): Severity {

@@ -5,7 +5,7 @@ import type { Node, Screen } from "../src/index.js";
 
 import { loginAst } from "./login.ast.js";
 
-/** Un Stack minimal valide, base des cas négatifs. */
+/** Nœuds minimaux valides, base des cas. */
 const stack: Node = {
   type: "Stack",
   props: { dir: "v" },
@@ -32,7 +32,7 @@ const icon: Node = {
   overrides: [],
 };
 
-const screenOf = (...children: unknown[]): unknown => ({ name: "S", children });
+const screenOf = (root: unknown): unknown => ({ name: "S", root });
 
 describe("AST de Login.ir (spec §10.1)", () => {
   it("typecheck comme Screen et passe le schéma sans modification", () => {
@@ -51,19 +51,19 @@ describe("AST de Login.ir (spec §10.1)", () => {
 
 describe("schéma : ce qui est accepté", () => {
   it.each<[string, unknown]>([
-    ["écran sans nœud", screenOf()],
     ["nœud sans #id", screenOf(stack)],
     ["Stack minimal", screenOf(stack)],
     ["Box sans propriété", screenOf(box)],
+    ["racine feuille", screenOf(text)],
     [
       "Text avec slot",
       screenOf({ ...text, content: { kind: "slot", name: "s" } }),
     ],
     [
-      "Icon avec contraintes et rôle",
+      "Icon avec rôle et label",
       screenOf({
         ...icon,
-        props: { ...icon.props, maxW: 32, role: { kind: "decorative" } },
+        props: { ...icon.props, role: { kind: "decorative" }, label: "Aide" },
       }),
     ],
     [
@@ -95,6 +95,10 @@ describe("schéma : ce qui est accepté", () => {
         ],
       }),
     ],
+    [
+      "surcharge vide",
+      screenOf({ ...box, overrides: [{ breakpoint: "expanded", props: {} }] }),
+    ],
   ])("%s", (_label, value) => {
     expect(ScreenSchema.safeParse(value).success).toBe(true);
   });
@@ -102,7 +106,9 @@ describe("schéma : ce qui est accepté", () => {
 
 describe("schéma : ce qui est rejeté", () => {
   it.each<[string, unknown]>([
-    ["clé inconnue sur l'écran", { name: "S", children: [], extra: 1 }],
+    ["clé inconnue sur l'écran", { name: "S", root: box, extra: 1 }],
+    ["écran sans racine", { name: "S" }],
+    ["plusieurs racines", { name: "S", root: [box, box] }],
     [
       "type de nœud inconnu",
       screenOf({ type: "Grid", props: {}, overrides: [] }),
@@ -130,6 +136,10 @@ describe("schéma : ce qui est rejeté", () => {
     [
       "Icon avec w (implicite, non exprimable)",
       screenOf({ ...icon, props: { ...icon.props, w: { kind: "fill" } } }),
+    ],
+    [
+      "Icon avec minW (implicite, non exprimable)",
+      screenOf({ ...icon, props: { ...icon.props, minW: 12 } }),
     ],
     ["Stack sans dir", screenOf({ ...stack, props: {} })],
     [
@@ -241,7 +251,7 @@ describe("schéma : ce qui est rejeté", () => {
 
 describe("types", () => {
   it("un Screen est un objet JSON plat, sans classe", () => {
-    const s: Screen = { name: "S", children: [] };
+    const s: Screen = { name: "S", root: box };
     expect(Object.getPrototypeOf(s)).toBe(Object.prototype);
   });
 });
