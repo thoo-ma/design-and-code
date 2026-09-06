@@ -5,4 +5,5 @@ coverage/
 .DS_Store
 .turbo/
 test-results/
+**/test/geometry/.tmp/
 playwright-report/

@@ -59,6 +59,9 @@ const text = (id: string, content: Content, extra: object = {}): Node => ({
   content,
 });
 const screen = (root: Node, name = "S"): Screen => ({ name, root });
+/** Les cinq propriétés d'un `$type.body.md` (§11.1), telles que le compilateur les émet. */
+const TYPO_BODY_MD =
+  "  font-family: var(--type-body-md-font-family);\n  font-size: var(--type-body-md-font-size);\n  line-height: var(--type-body-md-line-height);\n  font-weight: var(--type-body-md-font-weight);\n  letter-spacing: var(--type-body-md-letter-spacing);";
 const fill = { kind: "fill" } as const;
 const fixed = (n: number) => ({ kind: "fixed", value: n }) as const;
 const cssRule = (css: string, id: string): string => {
@@ -104,11 +107,11 @@ describe("golden : Login (spec §10.2, §9.1)", () => {
 });
 
 describe("table §11.1 : dimensions", () => {
-  it("racine : 100 %, fit-content ou px, toujours émis", () => {
+  it("racine : 100 %, max-content ou px, toujours émis", () => {
     expect(
       cssRule(compile(screen(stack("root", { dir: "v" }))).css, "root"),
     ).toBe(
-      "  display: flex;\n  flex-direction: column;\n  width: fit-content;\n  height: fit-content;\n  align-items: flex-start;",
+      "  display: flex;\n  flex-direction: column;\n  width: max-content;\n  height: max-content;\n  align-items: flex-start;",
     );
     expect(
       cssRule(
@@ -199,7 +202,7 @@ describe("table §11.1 : Stack, style, Text, Image, Icon", () => {
     ).toContain("  align-items: flex-start;\n  overflow: hidden;");
   });
 
-  it("Text : composes, color, text-align, maxLines avec ellipse ou coupe nette", () => {
+  it("Text : typographie, color, text-align, white-space, maxLines avec ellipse ou coupe nette", () => {
     const css = compile(
       screen(
         stack("root", { dir: "v" }, [
@@ -217,7 +220,7 @@ describe("table §11.1 : Stack, style, Text, Image, Icon", () => {
       ),
     ).css;
     expect(cssRule(css, "a")).toBe(
-      "  composes: type-body-md from global;\n  flex: 0 0 auto;\n  color: var(--color-text-primary);\n  text-align: center;\n  display: -webkit-box;\n  -webkit-line-clamp: 2;\n  -webkit-box-orient: vertical;\n  overflow: hidden;",
+      `${TYPO_BODY_MD}\n  flex: 0 0 auto;\n  color: var(--color-text-primary);\n  text-align: center;\n  white-space: pre-wrap;\n  display: -webkit-box;\n  -webkit-line-clamp: 2;\n  -webkit-box-orient: vertical;\n  overflow: hidden;`,
     );
     expect(cssRule(css, "b")).toContain(
       "  overflow: hidden;\n  max-height: calc(3 * 1.5em);",
@@ -351,10 +354,10 @@ describe("table §11.1 : Stack, style, Text, Image, Icon", () => {
     };
     const css = compile(screen(root)).css;
     expect(css).toContain(
-      "@media (min-width: 600px) {\n  .root {\n    flex-direction: row;\n    max-width: 480px;\n    padding: var(--space-xl);\n    overflow-x: auto;\n    overflow-y: revert;\n  }\n}",
+      "@media (min-width: 600px) {\n  .root {\n    overflow-y: revert;\n    flex-direction: row;\n    max-width: 480px;\n    padding: var(--space-xl);\n    overflow-x: auto;\n  }\n}",
     );
     expect(css).toContain(
-      "@media (min-width: 600px) {\n  .a {\n    flex: 1 1 0;\n    min-width: 0;\n    align-self: revert;\n    flex-shrink: revert;\n  }\n}",
+      "@media (min-width: 600px) {\n  .a {\n    align-self: revert;\n    flex-shrink: revert;\n    flex: 1 1 0;\n    min-width: 0;\n  }\n}",
     );
   });
 
@@ -379,8 +382,8 @@ describe("table §11.1 : Stack, style, Text, Image, Icon", () => {
         ],
       ),
     ).toStrictEqual([
-      ["c", "3"],
       ["b", "revert"],
+      ["c", "3"],
     ]);
   });
 
@@ -460,7 +463,7 @@ describe("invariants pour la loi 2 (spec §11.1, T8)", () => {
       ),
     ).css;
     expect(cssRule(css, "a")).toBe(
-      "  composes: type-body-md from global;\n  flex: 0 0 auto;\n  color: var(--color-text-primary);\n  overflow: hidden;\n  max-height: min(40px, calc(3 * 1.5em));",
+      `${TYPO_BODY_MD}\n  flex: 0 0 auto;\n  color: var(--color-text-primary);\n  white-space: pre-wrap;\n  overflow: hidden;\n  max-height: min(40px, calc(3 * 1.5em));`,
     );
   });
 

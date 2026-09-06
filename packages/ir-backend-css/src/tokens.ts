@@ -85,19 +85,32 @@ export function compileTokensCss(
     const lines: string[] = [];
     let previousGroup: string | undefined;
     for (const [key, entry] of system.tokens) {
-      if (
-        !entry.referenceable ||
-        entry.path[0] === "bp" ||
-        entry.type === "typography"
-      )
-        continue;
+      if (!entry.referenceable || entry.path[0] === "bp") continue;
       if (keys !== undefined && !keys.has(key)) continue;
+      const group = entry.path[0] ?? "";
+      // Un token de typographie donne une variable par champ : c'est ce que
+      // le backend émet sur un Text, y compris dans un @media (§11.1).
+      if (entry.type === "typography") {
+        const fields = typographyFields(entry);
+        if (fields === undefined) {
+          e010(
+            entry,
+            "Token de typographie incomplet : fontFamily, fontSize, lineHeight, fontWeight et letterSpacing sont requis",
+          );
+          continue;
+        }
+        if (previousGroup !== undefined && group !== previousGroup)
+          lines.push("");
+        previousGroup = group;
+        for (const [property, value] of fields)
+          lines.push(`  ${cssVariable(entry)}-${property}: ${value};`);
+        continue;
+      }
       const value = cssValue(entry);
       if (value === undefined) {
         e010(entry, `Type DTCG « ${entry.type} » sans traduction CSS`);
         continue;
       }
-      const group = entry.path[0] ?? "";
       if (previousGroup !== undefined && group !== previousGroup)
         lines.push("");
       previousGroup = group;
@@ -130,7 +143,8 @@ export function compileTokensCss(
   if (typography.length > 0) {
     out.push(
       "",
-      "/* Tokens composites de typographie : une classe par token. Text.style: $type.heading.lg -> .type-heading-lg */",
+      "/* Tokens composites de typographie : une classe par token, pour le code écrit à la main. */",
+      "/* La zone générée, elle, cite les variables ci-dessus, qui fonctionnent aussi dans un @media. */",
       "",
     );
     const rows: {
@@ -139,14 +153,14 @@ export function compileTokensCss(
     }[] = [];
     for (const entry of typography) {
       const fields = typographyFields(entry);
-      if (fields === undefined) {
-        e010(
-          entry,
-          "Token de typographie incomplet : fontFamily, fontSize, lineHeight, fontWeight et letterSpacing sont requis",
-        );
-        continue;
-      }
-      rows.push({ name: cssTypographyClass(entry), fields });
+      if (fields === undefined) continue; // déjà signalé avec les variables
+      rows.push({
+        name: cssTypographyClass(entry),
+        fields: fields.map(
+          ([property]) =>
+            `${property}: var(${cssVariable(entry)}-${property});`,
+        ),
+      });
     }
     out.push(...alignedRules(rows));
   }
@@ -245,7 +259,10 @@ function cssShadow(value: unknown): string | undefined {
   return `${parts.join(" ")} rgba(${rgb.join(", ")}, ${String(alpha)})`;
 }
 
-function typographyFields(entry: TokenEntry): readonly string[] | undefined {
+/** Champs CSS d'un token de typographie, dans l'ordre : nom de propriété, valeur. */
+function typographyFields(
+  entry: TokenEntry,
+): readonly (readonly [string, string])[] | undefined {
   const v = entry.value;
   if (!isObject(v)) return undefined;
   const family = v["fontFamily"];
@@ -272,10 +289,19 @@ function typographyFields(entry: TokenEntry): readonly string[] | undefined {
     return undefined;
   }
   return [
-    `font-family: ${familyText};`,
-    `font-size: ${size};`,
-    `line-height: ${lineHeight};`,
-    `font-weight: ${weight};`,
-    `letter-spacing: ${spacing};`,
+    ["font-family", familyText],
+    ["font-size", size],
+    ["line-height", lineHeight],
+    ["font-weight", weight],
+    ["letter-spacing", spacing],
   ];
 }
+
+/** Les cinq propriétés d'un token de typographie, dans l'ordre de §11.1. */
+export const TYPOGRAPHY_PROPERTIES = [
+  "font-family",
+  "font-size",
+  "line-height",
+  "font-weight",
+  "letter-spacing",
+] as const;

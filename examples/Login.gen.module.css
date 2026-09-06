@@ -20,15 +20,25 @@
 }
 
 .title {
-  composes: type-heading-lg from global;
+  font-family: var(--type-heading-lg-font-family);
+  font-size: var(--type-heading-lg-font-size);
+  line-height: var(--type-heading-lg-line-height);
+  font-weight: var(--type-heading-lg-font-weight);
+  letter-spacing: var(--type-heading-lg-letter-spacing);
   flex: 0 0 auto;
   color: var(--color-text-primary);
+  white-space: pre-wrap;
 }
 
 .subtitle {
-  composes: type-body-md from global;
+  font-family: var(--type-body-md-font-family);
+  font-size: var(--type-body-md-font-size);
+  line-height: var(--type-body-md-line-height);
+  font-weight: var(--type-body-md-font-weight);
+  letter-spacing: var(--type-body-md-letter-spacing);
   flex: 0 0 auto;
   color: var(--color-text-secondary);
+  white-space: pre-wrap;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -48,7 +58,8 @@
   flex-shrink: 0;
   background: var(--color-bg-field);
   border-radius: var(--radius-md);
-  border: var(--size-hairline) solid var(--color-border-default);
+  outline: var(--size-hairline) solid var(--color-border-default);
+  outline-offset: calc(-1 * var(--size-hairline));
 }
 
 .password {
@@ -56,7 +67,8 @@
   flex-shrink: 0;
   background: var(--color-bg-field);
   border-radius: var(--radius-md);
-  border: var(--size-hairline) solid var(--color-border-default);
+  outline: var(--size-hairline) solid var(--color-border-default);
+  outline-offset: calc(-1 * var(--size-hairline));
 }
 
 .actions {
@@ -80,9 +92,14 @@
 }
 
 .primaryLabel {
-  composes: type-label-md from global;
+  font-family: var(--type-label-md-font-family);
+  font-size: var(--type-label-md-font-size);
+  line-height: var(--type-label-md-line-height);
+  font-weight: var(--type-label-md-font-weight);
+  letter-spacing: var(--type-label-md-letter-spacing);
   flex: 0 0 auto;
   color: var(--color-text-onAccent);
+  white-space: pre-wrap;
 }
 
 .help {

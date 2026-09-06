@@ -160,6 +160,8 @@ Les modes de dimension s'interprètent par rapport au parent :
 
 `overflow: scroll` rend le Stack défilant sur son axe principal uniquement.
 
+La bordure est décorative : elle se dessine à l'intérieur du rectangle et ne prend aucune place, ni pour la taille du nœud ni pour l'espace offert à ses enfants (ADR-010). Pour éloigner le contenu du bord, c'est `pad`.
+
 ### 4.3 Box
 
 Toutes les propriétés de style de Stack (`bg`, `radius`, `border`, `shadow`, `opacity`), sans `dir`, `gap`, `pad`, alignements ni enfants. Une `Box` en mode `hug` sur un axe a une taille intrinsèque de 0 sur cet axe : une `Box` utile est `fixed` ou `fill`.
@@ -214,7 +216,7 @@ Contraintes descendantes, tailles remontantes. Chaque nœud reçoit de son paren
 
 ### 5.2 Algorithme
 
-Notation. Une contrainte est un nombre ou ∞, avec `min(a, ∞) = a`. Les propriétés d'un nœud sont d'abord résolues pour le breakpoint actif (§4.7 : le breakpoint de plus grand seuil inférieur ou égal à la largeur du viewport), défauts de §4 appliqués, tokens `$space.*` et `$size.*` résolus en nombres par le design system. `available(nœud, axe, max)` est l'espace proposé borné par le nœud lui-même : `min(max, nœud.max<axe>)`. La géométrie produite est l'ensemble des rectangles `(x, y, w, h)` par identifiant de nœud, dans le repère de l'écran, origine en haut à gauche, racine en `(0, 0)`, sans arrondi.
+Notation. Une contrainte est un nombre ou ∞, avec `min(a, ∞) = a`. Les propriétés d'un nœud sont d'abord résolues pour le breakpoint actif (§4.7 : le breakpoint de plus grand seuil inférieur ou égal à la largeur du viewport), défauts de §4 appliqués, tokens `$space.*` et `$size.*` résolus en nombres par le design system. `available(nœud, axe, max)` est l'espace proposé borné par le nœud lui-même : `min(max, nœud.max<axe>)`. La racine reçoit le viewport comme contrainte sur les axes où elle est `fixed` ou `fill`, et ∞ sur un axe où elle est `hug` : c'est alors son contenu qui décide, et sa boîte peut dépasser le viewport, qui se déroule. C'est `max-content` en CSS. La géométrie produite est l'ensemble des rectangles `(x, y, w, h)` par identifiant de nœud, dans le repère de l'écran, origine en haut à gauche, racine en `(0, 0)`, sans arrondi.
 
 ```
 measure(node, maxW, maxH) -> (w, h)
@@ -224,27 +226,38 @@ measure(node, maxW, maxH) -> (w, h)
 
   si node est Text :
      texte = littéral, ou valeur d'exemple du slot (§5.3), ou chaîne vide
-     largeur disponible = selon mode w :
-        fixed(n) -> n ; fill -> available(w, maxW) ; hug -> available(w, maxW)
-        (mesure en une ligne si la largeur disponible est ∞)
-     (tw, th) = platform.measureText(texte, style, largeur disponible, maxLines)
-     w = selon mode w : fixed(n) -> n ; fill -> maxW ; hug -> tw
+     tmin = platform.measureText(texte, style, 0, aucun).w        -- le mot le plus long
+     tmax = platform.measureText(texte, style, ∞, aucun).w        -- largeur sans repli
+        (les deux largeurs intrinsèques ignorent maxLines, qui ne change pas la largeur)
+     w = selon mode w : fixed(n) -> n ; fill -> maxW ; hug -> max(tmin, min(tmax, available(w, maxW)))
+     borner w par min/max                                 -- w est la largeur utilisée
+     (tw, th) = platform.measureText(texte, style, w, maxLines)   -- le texte se replie dans w
      h = selon mode h : fixed(n) -> n ; fill -> maxH ; hug -> th
         (une feuille fill ne reçoit jamais ∞ en forme normale : son parent lui donne une
         part finie sur main, et la mesure comme hug puis la remesure de l'étape 6 sur cross)
-     borner par min/max ; retourner (w, h)
+     borner h par min/max ; retourner (w, h)
+
+     `hug` sur un Text est la largeur du texte sans repli, bornée par l'espace offert, jamais
+     la largeur de la plus longue ligne après repli (ADR-011), et jamais sous la largeur du mot
+     le plus long : un texte ne se replie pas à l'intérieur d'un mot.
 
   si node est Image ou Box :
      intrinsèque = (0, 0)                   -- l'asset n'est pas connu du layout de référence
      w = selon mode w : fixed(n) -> n ; fill -> maxW ; hug -> intrinsèque.w
      h = selon mode h : fixed(n) -> n ; fill -> maxH ; hug -> intrinsèque.h
-     si un seul axe est résolu (fixed ou fill) et ratio existe : dériver l'autre
-     borner par min/max ; retourner (w, h)
+     borner par min/max
+     si un seul axe est résolu (fixed ou fill) et ratio existe : dériver l'autre de la taille
+        bornée, puis le borner à son tour
+     retourner (w, h)
 
   si node est Stack :
      (main, cross) = axes selon dir
-     max = (available(w, maxW), available(h, maxH))
-        -- les min/max du Stack bornent d'abord l'espace proposé aux enfants, puis sa taille
+     max = (maxW, maxH)                     -- l'espace que le parent propose
+     sur un axe où le mode du Stack est fixed ou fill, sa taille ne dépend pas des enfants :
+        elle est calculée d'abord (bornée par min/max, puis par le padding) et remplace max
+        sur cet axe ; c'est elle qui contraint les enfants, comme une taille définie en CSS
+     sur un axe hug, les min/max du Stack ne bornent que sa propre taille, jamais l'espace
+        proposé aux enfants : sous un max plus petit, le contenu déborde au lieu de se replier
      innerMax = max(0, max - padding) sur chaque axe   -- jamais négatif, comme une boîte CSS
      si overflow: scroll : innerMax.main = ∞      -- l'axe de défilement propose l'infini (ADR-008)
      disponibleMain = innerMax.main - gap * (nbEnfants - 1)
@@ -261,11 +274,20 @@ measure(node, maxW, maxH) -> (w, h)
         sinon il est transitoire (mesure provisoire d'un ancêtre étiré, remesuré à l'étape 6
         avec une contrainte finie) et reste = 0 en attendant, comme flexbox avec une taille
         indéfinie
-        enfants fill sur main : part = reste / nbFill ; mesurer avec (part, innerMax.cross).
+        si le Stack est hug sur main : reste = 0, il n'y a pas d'espace libre à répartir et
+        un enfant fill vaut sa base, zéro (comme flex-basis: 0) ; le cas n'existe que sous
+        l'exception de la règle 1 de §6, un parent étiré par son grand-parent
+        enfants fill sur main : chacun part de sa base, le padding qu'il porte sur l'axe
+        principal (zéro pour une feuille), qui est incompressible et sort de l'espace à
+        répartir ; part = (reste - somme des bases) / nbFill ; mesurer avec (base + part,
+        innerMax.cross). C'est `flex-basis: 0` en CSS, où le padding n'est pas réparti.
         Si un enfant fill est borné par son min/max sur main, sa taille est gelée à la borne,
-        retirée du reste, et les parts des autres sont recalculées, jusqu'à ce que plus aucun
-        ne soit borné (au plus nbFill tours, comme flexbox). Somme -> S_fill
-     4. taille main du Stack :
+        retirée du reste, et les parts des autres sont recalculées. À chaque tour, on ne gèle
+        que les enfants dont la violation va dans le sens de la violation totale (positive :
+        les minima ; négative : les maxima ; nulle : tous), comme flexbox — sans quoi un
+        enfant ramené à son maximum priverait les autres de la place ainsi rendue. Au plus
+        nbFill tours. Somme -> S_fill
+     4. taille main du Stack (les sommes sont celles obtenues après l'étape 6) :
         fixed(n) -> n
         hug      -> S_fixed + S_hug + S_fill + gaps + padding
         fill     -> max.main   (fini en forme normale, voir l'étape 3 ; E007 sinon)
@@ -273,10 +295,17 @@ measure(node, maxW, maxH) -> (w, h)
         fixed(n) -> n
         hug      -> max des tailles cross de tous les enfants (provisoires pour les fill) + padding
         fill     -> max.cross  (fini en forme normale ; E007 sinon)
-     borner par min/max
-     6. enfants fill sur cross, ou hug sur cross si crossAlign: stretch :
-        re-mesurer comme fill sur cross, avec cross = innerCross du Stack et la même
-        contrainte main qu'avant ; un enfant fixed sur cross n'est jamais étiré, une Icon non plus
+     borner par min/max, puis par le padding : un Stack n'est jamais plus petit que son
+        padding, qui est incompressible (comme une boîte CSS `border-box`)
+     6. innerCross = la taille cross utilisée du Stack moins le padding, bornes min/max
+        comprises. Un enfant qui se dimensionne seul ne descend pas sous son minimum de
+        contenu (le mot le plus long, pour un texte) et déborde alors, comme en CSS.
+        Chaque enfant est remesuré avec cette contrainte :
+        en fill s'il est fill sur cross ou si crossAlign: stretch l'étire, dans son propre mode
+        sinon ; un enfant déjà mesuré avec cette contrainte ne l'est pas deux fois, un enfant
+        fixed sur cross n'est jamais étiré, une Icon non plus. La contrainte main est celle
+        d'avant. La taille main du Stack (étape 4) est calculée après cette remesure, sur les
+        tailles obtenues : plus large sur cross, un texte a moins de lignes
      retourner (w, h)
 
 arrange(node, x, y) :
@@ -288,7 +317,8 @@ arrange(node, x, y) :
      between : libre réparti en nbEnfants - 1 intervalles ajoutés au gap ;
         start si un seul enfant ou si libre < 0
      sur cross, chaque enfant selon crossAlign : start | center | end dans innerCross = max(0, taille.cross - padding.cross) ;
-        stretch : déjà dimensionné à l'étape 6, placé à padding.start
+        stretch : déjà dimensionné à l'étape 6, placé à padding.start ; un enfant fill sur cross
+        aussi, même si un min/max l'a ramené à une taille plus petite que innerCross
      un Stack scroll place son contenu à partir de padding.start, sans décalage de
         défilement ; le contenu peut déborder de sa taille
      puis récurser
@@ -297,7 +327,7 @@ arrange(node, x, y) :
 
 Deux remarques d'implémentation :
 - Le passage 6 est la seule remesure ; elle est bornée (une fois par enfant) et ne fait pas de point fixe. Le gel de l'étape 3 est borné par le nombre d'enfants fill. C'est ce qui garantit la terminaison en O(n) et la prévisibilité.
-- Un enfant `fill` sur un axe où son parent est `hug` est éliminé par la forme normale (§6, règle 1), sauf si le parent est étiré sur cet axe par son propre parent. L'algorithme rencontre alors ce `fill` avec une contrainte finie sur l'axe (celle de l'axe secondaire du grand-parent à l'étape 2, puis celle de la remesure de l'étape 6) et le remplit : c'est le résultat attendu, `#primary` dans `#actions` en §10.
+- Un enfant `fill` sur un axe où son parent est `hug` est éliminé par la forme normale (§6, règle 1), sauf si le parent est étiré sur cet axe par son propre parent. L'algorithme le mesure alors à zéro tant que le parent est mesuré comme `hug` (étape 3), puis le remplit à la remesure de l'étape 6, où le grand-parent a donné au parent une taille : c'est le résultat attendu, `#primary` dans `#actions` en §10.
 
 ### 5.3 Mesure de texte
 
@@ -305,7 +335,7 @@ Deux remarques d'implémentation :
 
 Le texte d'un `slot` est la valeur d'exemple fournie au layout, la même que celle des stories et des `#Preview` (§9.3) ; sans valeur, la chaîne vide.
 
-Pour les tests, une mesure déterministe de référence est fournie, qui rend les tests reproductibles sans navigateur ni simulateur : police monospace fictive, largeur de caractère `0,6 × fontSize + letterSpacing`, hauteur de ligne `fontSize × lineHeight`, repli aux espaces, un mot plus long que la largeur disponible occupe sa ligne et déborde, au plus `maxLines` lignes, texte vide de hauteur nulle.
+Pour les tests, une mesure déterministe de référence est fournie, qui rend les tests reproductibles sans navigateur ni simulateur : police monospace fictive, largeur de caractère `0,6 × fontSize + letterSpacing`, hauteur de ligne `fontSize × lineHeight`, repli aux espaces, un mot plus long que la largeur disponible occupe sa ligne et déborde, les espaces en fin de ligne débordent au lieu de provoquer un repli (ils pendent, comme en CSS) et comptent dans la largeur de la dernière ligne, au plus `maxLines` lignes, texte vide de hauteur nulle.
 
 ---
 
@@ -363,7 +393,11 @@ Un dossier `examples/` avec des écrans écrits à la main (dont celui de §10),
 
 ### 8.3 Géométrie des backends (loi 3)
 
-- CSS : Playwright, page compilée, lecture des `getBoundingClientRect` par `data-ir` id, comparaison à `geometry_ref` avec la même police (police de test embarquée, métriques connues).
+- CSS : Playwright, page compilée, lecture des `getBoundingClientRect` par `data-ir`, comparaison à `geometry_ref` à 1 u près, sur les golden de `examples/` et sur 200 IR tirées de `genIR`. La page est la sortie du compilateur, plus ce qu'un projet fournit une fois : `tokens.css`, `ir-reset.css` (§9.1) et `ir-support.tsx`. La police est construite pour le test : chaque glyphe avance exactement `0,6 em`, la valeur de `monospaceMeasure` (§5.3), si bien que le navigateur et la mesure de référence mesurent le même texte de la même façon — c'est le « à mesure fixée » de la loi 3. Le corpus se limite donc aux caractères couverts par cette police, un caractère hors alphabet tombant sur une police de repli aux métriques inconnues.
+
+  La mesure fixée l'est jusqu'au rendu : le harnais lance le Chromium complet, jamais le *headless shell* de Playwright, et coupe le hinting (`--font-render-hinting=none`). Un rendu hinté arrondit l'avance des glyphes au pixel entier — 17 px là où la police en déclare 16,8 — et la géométrie glisse proportionnellement à la longueur du texte. Un test dédié le vérifie avant le corpus, pour que cette dérive se lise comme telle et non comme un écart de layout.
+
+  Trois substitutions appartiennent au harnais et non au compilateur : la famille de police des tokens devient celle du test ; le `src` des images devient un PNG 1×1 transparent, l'asset n'étant pas dans l'IR (la référence lui donne une taille intrinsèque nulle et aucun axe n'en dépend, §4.5) ; les barres de défilement sont masquées, le modèle de référence n'en ayant pas.
 - SwiftUI : cible de test XCTest qui héberge la vue compilée, lit les frames via `GeometryReader` injecté par l'identifiant `.irNode`, compare. Plus lourd ; s'exécute sur macOS uniquement, hors du chemin critique CI Linux, mais bloquant avant un tag.
 
 ### 8.4 Importeurs
@@ -389,6 +423,8 @@ Login.stories.tsx    zone générée : story avec les placeholders
 ```
 
 `Login.tsx` est écrit une seule fois, à la première compilation, puis jamais réécrit. Un fichier `ir-support.tsx`, un par projet, fournit `Icon` (sprite SVG, noms `web` de `icons.json`) et le type `ImageSource` (ADR-009).
+
+La zone générée suppose une réinitialisation, `ir-reset.css`, elle aussi écrite une fois par projet et chargée avant `tokens.css` : `box-sizing: border-box`, marges, paddings et bordures d'agent utilisateur à zéro, `img` et `svg` en `display: block`. Le modèle de boîtes de l'IR est celui de §5, où une taille est la taille extérieure et où un `<p>` n'a pas de marge.
 
 `decompile_css` lit `Login.gen.tsx` et `Login.gen.module.css` uniquement, avec le design system, et rend la forme normale. C'est un parsing de forme, l'inverse de la table §11.1 : le nom de l'écran est celui du module CSS importé (`./Login.gen.module.css`) ; l'arbre est l'imbrication des éléments ; chaque nœud porte son `data-ir` et la règle du même nom ; le type se lit sur la balise et sur `display: flex` (un `<div>` sans lui est une `Box`) ; les propriétés se lisent sur les déclarations de la règle, le contenu, `role` et `label` sur l'élément. Chaque bloc `@media (min-width: n px)` désigne le breakpoint du design system de seuil n ; les déclarations effectives à ce breakpoint sont celles de la base recouvertes par le bloc (`revert` retire), et la surcharge est la différence entre les propriétés résolues à ce breakpoint et celles de la base, que `N` réencode. Tout ce qui sort de ces formes est E003, avec le chemin du nœud et ce qui a été trouvé ; un token, une icône ou un seuil inconnus du design system sont E002 ; un `data-ir` dupliqué est E005. Le décompilateur ne devine jamais : une déclaration ou un attribut qu'il ne sait pas lire est une erreur, pas un oubli.
 
@@ -527,7 +563,8 @@ Extraits verbatim de `examples/Login.gen.module.css` et `examples/Login.gen.tsx`
   flex-shrink: 0;
   background: var(--color-bg-field);
   border-radius: var(--radius-md);
-  border: var(--size-hairline) solid var(--color-border-default);
+  outline: var(--size-hairline) solid var(--color-border-default);
+  outline-offset: calc(-1 * var(--size-hairline));
 }
 ```
 
@@ -652,9 +689,10 @@ Cible React + CSS Modules (ADR-009). Chaque nœud a une classe nommée par son `
 | `w: fixed(n)` | `width: n px` ou `var(--size-x)`, plus `flex-shrink: 0` si l'axe est l'axe principal du parent |
 | `w: hug` (main) | `flex: 0 0 auto` |
 | `w: hug` (cross) | rien : `align-items` du parent, toujours émis, s'applique |
+| `w: hug` sur un `Stack(dir: h)` non étiré | `width: max-content` : la taille d'un Stack sur son axe principal est celle de son contenu, que l'espace disponible ne rabote pas (§5.2) ; sans elle, CSS rétrécirait |
 | `w: fill` (main) | `flex: 1 1 0; min-width: 0` (`min-height: 0` en colonne) ; si `minW` (`minH`) est présent, sa déclaration remplace ce `0` |
 | `w: fill` (cross) | `align-self: stretch` |
-| `w`, `h` de la racine | `width` / `height` : `100%` (fill), `fit-content` (hug), `n px` (fixed), toujours émis |
+| `w`, `h` de la racine | `width` / `height` : `100%` (fill), `max-content` (hug, le contenu décide, §5.2), `n px` (fixed), toujours émis |
 | `minW`, `maxW`, ... | `min-width`, `max-width`, ... |
 | `gap: $t` | `gap: var(--t)` |
 | `pad: ...` | `padding: ...`, une, deux ou quatre valeurs |
@@ -662,12 +700,14 @@ Cible React + CSS Modules (ADR-009). Chaque nœud a une classe nommée par son `
 | `crossAlign` | `align-items: flex-start / center / flex-end / stretch`, toujours émis (le défaut CSS est `stretch`) |
 | `overflow: clip` | `overflow: hidden` |
 | `overflow: scroll` | `overflow-y: auto` (v) / `overflow-x: auto` (h) |
-| `bg`, `radius`, `border`, `shadow`, `opacity` | `background`, `border-radius`, `border: w solid color`, `box-shadow`, `opacity`, valeurs via variables CSS |
-| `Text.style: $type.x` | `composes: type-x from global` (classe utilitaire de `tokens.css`) |
+| `bg`, `radius`, `border`, `shadow`, `opacity` | `background`, `border-radius`, `outline: w solid color` plus `outline-offset: calc(-1 * w)` (bordure décorative, ADR-010), `box-shadow`, `opacity`, valeurs via variables CSS |
+| `Text.style: $type.x` | `font-family`, `font-size`, `line-height`, `font-weight`, `letter-spacing`, chacune `var(--type-x-<propriété>)` : un token de typographie donne une variable par champ, seule forme qui fonctionne aussi dans un `@media`. Les classes utilitaires de `tokens.css` restent pour le code écrit à la main |
 | `Text.color` | `color` |
 | `Text.align` | `text-align: center / end`, omis pour `start` |
+| `Text`, toujours | `white-space: pre-wrap` : les espaces et les sauts de ligne d'un littéral comptent dans la mesure de référence (§5.3) |
 | `Text.maxLines: n` (`truncate: end`) | `display: -webkit-box; -webkit-line-clamp: n; -webkit-box-orient: vertical; overflow: hidden` |
-| `Text.maxLines: n, truncate: none` | `overflow: hidden; max-height: calc(n * Lem)`, L étant le `lineHeight` du token ; avec `maxH`, `max-height: min(maxH, calc(n * Lem))` porte les deux |
+| `Text.maxLines: n, truncate: none`, hauteur `hug` | `overflow: hidden; max-height: calc(n * Lem)`, L étant le `lineHeight` du token ; avec `maxH`, `max-height: min(maxH, calc(n * Lem))` porte les deux |
+| `Text.maxLines: n, truncate: none`, hauteur définie | le line-clamp de `end`, plus `--ir-truncate: none` : une hauteur maximale changerait une boîte que `fixed` ou `fill` fixe déjà. Le navigateur dessine alors l'ellipse du line-clamp — seule infidélité de rendu de cette table, la géométrie reste exacte |
 | `Image.fit: contain` | `object-fit: contain`, omis pour `cover` |
 | `Image.ratio: (w, h)` | `aspect-ratio: w / h` |
 | `Icon` | `<Icon name="nom web" />` (ADR-005) ; `width` et `height: var(--size-x)`, `color: var(--color-x)`, `flex-shrink: 0` |
@@ -681,7 +721,7 @@ Cible React + CSS Modules (ADR-009). Chaque nœud a une classe nommée par son `
 | `label` | `aria-label` ; sur une `Image`, `alt` (`alt=""` sans label) |
 | contenu littéral | texte JSX, ou `{"…"}` s'il contient `{`, `}`, `<`, `>`, `&`, un retour à la ligne ou un espace en bord |
 | `slot(nom)` | `{nom}` sur un `Text` ; `src={nom.src} alt={nom.alt ?? "…"}` sur une `Image`, le repli étant le `label` du nœud (`""` sans label) ; paramètre du composant |
-| `@expanded(...)` | `@media (min-width: 600px) { .id { ... } }` après la règle du nœud : les déclarations qui changent au breakpoint, et `revert` pour celles qui disparaissent |
+| `@expanded(...)` | `@media (min-width: 600px) { .id { ... } }` après la règle du nœud : d'abord `revert` pour les déclarations qui disparaissent, puis celles qui changent (un `revert` de raccourci placé après un longhand l'annulerait) |
 
 Le seuil 600 est lu dans le design system (`$bp.expanded`), jamais codé en dur dans le compilateur. Le compilateur normalise son entrée (§7, loi 4) et n'émet jamais deux fois la même propriété dans une règle : la règle d'un nœud est une fonction de ses propriétés résolues, et la décompilation (§9.1) la lit comme un dictionnaire.
 
@@ -792,6 +832,8 @@ Chaque question est tranchée par un ADR avant la tâche qu'elle bloque, ou not�
 6. **Scroll et `fill`.** Tranché par l'ADR-008 : un enfant `fill` sur l'axe de défilement d'un Stack `scroll` est E007, détectée au typecheck quand c'est statiquement décidable et au layout sinon. L'alternative, l'interpréter comme `hug`, rendrait la loi 3 fausse par construction.
 7. **Troisième breakpoint.** Tranché par l'ADR-003 : deux breakpoints en v0, l'extension est notée là.
 8. **Identifiants générés.** Tranché par l'ADR-007 : hash du chemin d'indices et du type.
+
+Les lois en ont ouvert deux autres, qui ne figuraient pas dans cette liste et sont tranchées elles aussi : la bordure prend-elle de la place (ADR-010 : non, elle est décorative) et que vaut `hug` sur un texte qui se replie (ADR-011 : la largeur sans repli, bornée par l'espace offert). Toutes deux ont été trouvées par la loi 3, en montrant qu'un backend ne pouvait pas satisfaire la spec telle qu'elle était écrite.
 
 ---
 

@@ -28,8 +28,10 @@ Une décision structurante est un ADR dans `docs/adr/`. Elles ne se contredisent
 | 007 | Les identifiants générés sont un hash du chemin | q8 |
 | 008 | Un `fill` sur l'axe de défilement est une erreur | q6 |
 | 009 | La cible web est React avec CSS Modules | q4 |
+| 010 | La bordure est décorative, hors du layout | — |
+| 011 | `hug` sur un Text est la largeur sans repli, bornée par l'espace offert | — |
 
-La colonne « Tranche » renvoie aux questions ouvertes de la spec §13. Les huit sont tranchées ; la q1 (nom et extension du langage) l'a été sans ADR : `.ir` jusqu'au papier.
+La colonne « Tranche » renvoie aux questions ouvertes de la spec §13. Les huit sont tranchées ; la q1 (nom et extension du langage) l'a été sans ADR : `.ir` jusqu'au papier. Les ADR-010 et 011 ne répondent à aucune de ces questions : ce sont les lois qui les ont posées, en montrant qu'un backend ne pouvait pas satisfaire la spec telle qu'elle était écrite.
 
 ## État
 
@@ -46,8 +48,8 @@ Spec v0.1 écrite et précisée au fil des tâches. Une ligne par tâche de `TAS
 | T6 | layout de référence (ADR-008) | `ir-layout-ref` | L3 (moitié référence) | fait |
 | T7 | compilateur IR → React + CSS Modules (ADR-009) | `ir-backend-css` | — | fait |
 | T8 | décompilateur | `ir-backend-css` | L2, L4 (commutation) | fait |
-| T9 | géométrie CSS par Playwright | `ir-backend-css` | L3 (moitié backend) | en cours |
-| T10 | importeur DOM | `ir-import-dom` | — | à faire |
+| T9 | géométrie CSS par Playwright (ADR-010, ADR-011) | `ir-backend-css` | L3 (moitié backend) | fait |
+| T10 | importeur DOM | `ir-import-dom` | — | en cours |
 | T11 | backend SwiftUI | `ir-backend-swiftui` | L2, L3 | à faire |
 | T12 | importeur Figma | `ir-import-figma` | L1 | à faire |
 
@@ -59,13 +61,16 @@ Node ≥ 22.12, pnpm 10.33 (voir `engines` et `packageManager` du `package.json`
 
 ```
 pnpm install
-pnpm test          # vitest, tous les packages
-pnpm typecheck     # tsc, un projet par package
-pnpm lint          # eslint
-pnpm format:check  # prettier
+pnpm test           # vitest, tous les packages : lois 0, 2 et 4, golden, propriétés
+pnpm test:geometry  # loi 3 : la page compilée dans Chromium, comparée au layout de référence
+pnpm typecheck      # tsc, un projet par package
+pnpm lint           # eslint
+pnpm format:check   # prettier
 ```
 
-La CI (`.github/workflows/ci.yml`) lance ces quatre vérifications en matrice sur Node LTS. Le markdown, la spec, les fixtures et les exemples sont dans `.prettierignore` : ils s'écrivent à la main et ne sont jamais reformatés.
+`pnpm test:geometry` est à part parce qu'il demande un navigateur : `pnpm --filter ir-backend-css exec playwright install chromium`, ou la variable `IR_CHROMIUM_PATH` si l'environnement en fournit déjà un.
+
+La CI (`.github/workflows/ci.yml`) lance les quatre premières vérifications en matrice sur Node LTS, et la loi 3 dans une tâche à part, qui installe Chromium. Le markdown, la spec, les fixtures et les exemples sont dans `.prettierignore` : ils s'écrivent à la main et ne sont jamais reformatés.
 
 ## Structure
 

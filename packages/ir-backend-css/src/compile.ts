@@ -32,6 +32,8 @@ import type {
   Token,
 } from "ir-core";
 
+import { TYPOGRAPHY_PROPERTIES } from "./tokens.js";
+
 export interface CssCompileOptions {
   readonly designSystem: DesignSystem;
   /** Valeurs d'exemple des slots pour la story et la zone préservée initiale ; défaut : le nom du slot. */
@@ -86,6 +88,15 @@ export function componentName(screenName: string): string {
       .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
       .join("") + "Layout"
   );
+}
+
+/** Les cinq propriétés d'un `$type.*`, chacune tirée de la variable du token. */
+export function typographyDeclarations(style: Token<"type">): Decl[] {
+  const base = `--${[style.group, ...style.path].join("-")}`;
+  return TYPOGRAPHY_PROPERTIES.map((property) => [
+    property,
+    `var(${base}-${property})`,
+  ]);
 }
 
 /** Variable CSS d'un token : `$color.text.primary` → `var(--color-text-primary)`. */
@@ -263,11 +274,10 @@ class Compiler {
   ): Decl[] {
     const out: Decl[] = [];
 
+    // La typographie passe par les variables du token, jamais par `composes` :
+    // une directive de CSS Modules serait inerte dans un @media (§11.1).
     if (node.type === "Text")
-      out.push([
-        "composes",
-        `${[node.props.style.group, ...node.props.style.path].join("-")} from global`,
-      ]);
+      out.push(...typographyDeclarations(node.props.style));
     if (node.type === "Stack") {
       out.push(
         ["display", "flex"],
@@ -281,6 +291,15 @@ class Compiler {
       node.type === "Icon"
         ? { kind: "fixed", value: node.props.size }
         : (node.props[axis] ?? { kind: "hug" });
+    // Hauteur menée par le contenu : `hug`, et non étirée par le parent.
+    // C'est la seule où une hauteur maximale exprime la coupe nette (§11.1).
+    const contentHeight =
+      sizeOf("h").kind === "hug" &&
+      !(
+        parent !== undefined &&
+        parent.props.dir === "h" &&
+        (parent.props.crossAlign ?? "start") === "stretch"
+      );
     let minInFlex: "minW" | "minH" | undefined;
     for (const axis of ["w", "h"] as const) {
       const prop = axis === "w" ? "width" : "height";
@@ -291,7 +310,7 @@ class Compiler {
           size.kind === "fill"
             ? "100%"
             : size.kind === "hug"
-              ? "fit-content"
+              ? "max-content"
               : this.length(size.value),
         ]);
         continue;
@@ -301,6 +320,20 @@ class Compiler {
         out.push([prop, this.length(size.value)]);
         if (onMain) out.push(["flex-shrink", "0"]);
       } else if (size.kind === "hug") {
+        // Un Stack dont l'axe principal est la largeur étreint son contenu :
+        // `max-content`, que l'espace disponible ne rabote pas (§11.1). Sans
+        // cette déclaration, CSS rétrécirait là où la référence déborde.
+        if (
+          axis === "w" &&
+          node.type === "Stack" &&
+          node.props.dir === "h" &&
+          !(
+            parent !== undefined &&
+            parent.props.dir === "v" &&
+            (parent.props.crossAlign ?? "start") === "stretch"
+          )
+        )
+          out.push([prop, "max-content"]);
         if (onMain) out.push(["flex", "0 0 auto"]);
       } else if (onMain) {
         // Le min-* de fill vaut 0 ; une contrainte minW/minH le remplace,
@@ -327,7 +360,8 @@ class Compiler {
       const maxHInClamp =
         node.type === "Text" &&
         node.props.maxLines !== undefined &&
-        node.props.truncate === "none";
+        node.props.truncate === "none" &&
+        contentHeight;
       if (c.minW !== undefined && minInFlex !== "minW")
         out.push(["min-width", this.length(c.minW)]);
       if (c.maxW !== undefined) out.push(["max-width", this.length(c.maxW)]);
@@ -367,11 +401,13 @@ class Compiler {
       if (st.bg !== undefined) out.push(["background", cssVar(st.bg)]);
       if (st.radius !== undefined)
         out.push(["border-radius", cssVar(st.radius)]);
+      // La bordure est décorative (ADR-010) : un contour interne, qui ne
+      // change jamais la géométrie, là où `border` amputerait la boîte.
       if (st.border !== undefined)
-        out.push([
-          "border",
-          `${cssVar(st.border[0])} solid ${cssVar(st.border[1])}`,
-        ]);
+        out.push(
+          ["outline", `${cssVar(st.border[0])} solid ${cssVar(st.border[1])}`],
+          ["outline-offset", `calc(-1 * ${cssVar(st.border[0])})`],
+        );
       if (st.shadow !== undefined) out.push(["box-shadow", cssVar(st.shadow)]);
       if (st.opacity !== undefined) out.push(["opacity", cssVar(st.opacity)]);
     }
@@ -381,15 +417,14 @@ class Compiler {
       out.push(["color", cssVar(tp.color)]);
       if (tp.align !== undefined && tp.align !== "start")
         out.push(["text-align", tp.align]);
+      // Les espaces et les sauts de ligne d'un littéral comptent dans la
+      // mesure de référence (§5.3) : le navigateur ne doit pas les replier.
+      out.push(["white-space", "pre-wrap"]);
       if (tp.maxLines !== undefined) {
-        if ((tp.truncate ?? "end") === "end") {
-          out.push(
-            ["display", "-webkit-box"],
-            ["-webkit-line-clamp", String(tp.maxLines)],
-            ["-webkit-box-orient", "vertical"],
-            ["overflow", "hidden"],
-          );
-        } else {
+        const clean = (tp.truncate ?? "end") === "none";
+        // La coupe nette passe par une hauteur maximale, qui ne peut pas
+        // s'appliquer à une hauteur déjà définie : elle changerait la boîte.
+        if (clean && contentHeight) {
           const lh = this.lineHeight(tp.style, path);
           const clamp = `calc(${String(tp.maxLines)} * ${String(lh ?? 1)}em)`;
           out.push(
@@ -401,6 +436,14 @@ class Compiler {
                 : `min(${this.length(tp.maxH)}, ${clamp})`,
             ],
           );
+        } else {
+          out.push(
+            ["display", "-webkit-box"],
+            ["-webkit-line-clamp", String(tp.maxLines)],
+            ["-webkit-box-orient", "vertical"],
+            ["overflow", "hidden"],
+          );
+          if (clean) out.push(["--ir-truncate", "none"]);
         }
       }
     }
@@ -630,7 +673,12 @@ function rule(
   return `${indent}${selector} {\n${lines.join("\n")}${lines.length > 0 ? "\n" : ""}${indent}}`;
 }
 
-/** Déclarations qui changent entre la base et un breakpoint ; `revert` pour celles qui disparaissent. */
+/**
+ * Déclarations qui changent entre la base et un breakpoint ; `revert` pour
+ * celles qui disparaissent. Les `revert` sont émis d'abord : `flex: revert`
+ * après `flex-shrink: 0` annulerait le longhand, le raccourci étant réécrit
+ * en entier par la cascade.
+ */
 export function diffDeclarations(
   base: readonly Decl[],
   other: readonly Decl[],
@@ -638,8 +686,8 @@ export function diffDeclarations(
   const out: Decl[] = [];
   const baseMap = new Map(base);
   const otherMap = new Map(other);
-  for (const [p, v] of other) if (baseMap.get(p) !== v) out.push([p, v]);
   for (const [p] of base) if (!otherMap.has(p)) out.push([p, "revert"]);
+  for (const [p, v] of other) if (baseMap.get(p) !== v) out.push([p, v]);
   return out;
 }
 
