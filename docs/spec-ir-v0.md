@@ -67,7 +67,7 @@ Hors scope v0 (ADR-003) :
 ### 3.1 Grammaire
 
 ```
-document   := "screen" IDENT block
+document   := "screen" IDENT "{" node "}"
 block      := "{" node* "}"
 node       := TYPE id? "(" props? ")" content? override* block?
 id         := "#" IDENT
@@ -78,13 +78,20 @@ token      := "$" IDENT ("." IDENT)+
 tuple      := "(" value ("," value)* ")"
 call       := IDENT "(" value ("," value)* ")"
 content    := STRING | "slot" "(" IDENT ")"
-override   := "@" IDENT "(" props ")"
+override   := "@" IDENT "(" props? ")"
 ```
 
+Lexique :
+- `IDENT` : `[A-Za-z_][A-Za-z0-9_-]*`. Sert au nom d'écran, aux `#id`, aux clés, aux valeurs énumérées, aux segments de token, aux noms de slot et de breakpoint.
+- `NUMBER` : `[0-9]+ ("." [0-9]+)? ([eE] [+-]? [0-9]+)?`. Jamais de signe : l'IR n'a pas de valeur négative.
+- `STRING` : un littéral de chaîne JSON (guillemets doubles, échappements JSON).
+- Espaces, tabulations et retours à la ligne séparent les lexèmes et n'ont pas d'autre rôle. Pas de commentaires en v0.
+
 Contraintes hors grammaire :
-- `block` n'est autorisé que sur `Stack`.
-- `content` n'est autorisé que sur `Text` et `Image`.
-- Les `override` référencent un breakpoint connu du design system.
+- Un document contient exactement un nœud racine, de n'importe quel type.
+- `block` n'est autorisé que sur `Stack` ; un `Stack` sans bloc n'a pas d'enfant.
+- `content` est requis sur `Text` et `Image`, interdit ailleurs.
+- Les `override` référencent un breakpoint connu du design system ; un nœud en porte au plus un par breakpoint.
 - Les `id` sont uniques dans le document.
 
 ### 3.2 Exemple minimal
@@ -102,6 +109,16 @@ screen Hello {
 
 L'AST est un JSON dont la forme est la transcription directe de la grammaire. Il est produit par `parse` et consommé par tous les outils. `print(parse(x))` est défini en §7 (loi 0). Personne n'écrit le JSON à la main.
 
+### 3.4 Texte canonique
+
+`print` produit un texte unique pour un AST donné ; c'est la forme sous laquelle un `.ir` est commité (§6). Règles :
+
+1. Indentation de deux espaces par niveau : la racine est indentée d'un niveau sous `screen`, les enfants d'un `Stack` d'un niveau sous lui. Pas de ligne vide. Le fichier se termine par un retour à la ligne.
+2. Un nœud s'écrit `TYPE #id (props) content @bp(props) {` sur une ligne, dans cet ordre, parties absentes omises. Les parenthèses des propriétés sont toujours présentes, même vides. Un `Stack` porte toujours son bloc, `{}` s'il est vide.
+3. Les propriétés suivent l'ordre canonique de §6 règle 5, séparées par `, `.
+4. Si la ligne dépasse 80 caractères, les propriétés du nœud passent à une par ligne, indentées d'un niveau, sans virgule finale, et la parenthèse fermante revient à l'indentation du nœud, suivie du reste de l'en-tête. Si cette ligne de fermeture dépasse encore 80 caractères, les propriétés de chaque surcharge sont dépliées de la même façon.
+5. Valeurs : `fixed(48)`, `hug`, `fill` ; `$groupe.chemin` ; `($a, $b)` pour les tuples ; `heading(1)` ; `slot(nom)` ; les nombres dans leur écriture décimale la plus courte ; les chaînes encodées comme en JSON.
+
 ---
 
 ## 4. Le modèle de boîtes
@@ -110,9 +127,9 @@ L'AST est un JSON dont la forme est la transcription directe de la grammaire. Il
 
 | Propriété | Type | Défaut | Note |
 |---|---|---|---|
-| `w`, `h` | `fixed(n)` \| `hug` \| `fill` | `hug` | Mode de dimension par axe absolu (largeur, hauteur). |
-| `minW`, `maxW`, `minH`, `maxH` | longueur (littéral ou `$size.*`) | aucun | Contraintes appliquées après résolution du mode. |
-| `role` | `none` \| `heading(n)` \| `button` \| `textfield` \| `list` \| `listitem` \| `image` \| `decorative` | `none` | Sémantique, compilée vers la balise ou le trait d'accessibilité. |
+| `w`, `h` | `fixed(n)` \| `hug` \| `fill` | `hug` | Mode de dimension par axe absolu (largeur, hauteur). n ≥ 0. |
+| `minW`, `maxW`, `minH`, `maxH` | longueur (littéral ≥ 0 ou `$size.*`) | aucun | Contraintes appliquées après résolution du mode. |
+| `role` | `none` \| `heading(n)` \| `button` \| `textfield` \| `list` \| `listitem` \| `image` \| `decorative` | `none` | Sémantique, compilée vers la balise ou le trait d'accessibilité. 1 ≤ n ≤ 6. |
 | `label` | string | aucun | Libellé accessible quand le contenu visuel ne suffit pas. |
 
 Les modes de dimension s'interprètent par rapport au parent :
@@ -163,7 +180,7 @@ Contenu : littéral (placeholder) ou `slot(nom)`. Taille intrinsèque : celle du
 | Propriété | Type | Défaut |
 |---|---|---|
 | `fit` | `cover` \| `contain` | `cover` |
-| `ratio` | `(w, h)` entiers | aucun |
+| `ratio` | `(w, h)` entiers > 0 | aucun |
 | `radius` | `$radius.*` | aucun |
 
 Contenu : littéral (URL ou nom d'asset de placeholder) ou `slot(nom)`. Taille intrinsèque : celle de l'asset si connue, sinon dérivée de `ratio` et de l'autre axe, sinon 0. Une `Image` sans `fixed`, sans `fill` et sans `ratio` sur au moins un axe est une erreur (E006).
@@ -176,7 +193,7 @@ Contenu : littéral (URL ou nom d'asset de placeholder) ou `slot(nom)`. Taille i
 | `size` | `$size.*` | requis |
 | `color` | `$color.*` | requis |
 
-`w` et `h` sont implicitement `fixed(size)` et ne peuvent pas être surchargés.
+`w` et `h` sont implicitement `fixed(size)` ; ni eux ni les contraintes `minW`, `maxW`, `minH`, `maxH` ne peuvent être exprimés sur une `Icon` (§5.2 retourne `(size, size)` sans contrainte). `role` et `label` restent disponibles.
 
 ### 4.7 Breakpoints et surcharges
 
@@ -360,33 +377,69 @@ Chaque nœud est marqué par son `#id` dans le code généré (`data-ir="id"` en
 
 ### 10.1 Source
 
+Le texte ci-dessous est la forme canonique de §3.4, telle que `print` l'écrit et telle que `examples/Login.ir` est commité ; les deux sont identiques à l'octet près.
+
 ```
 screen Login {
-  Stack #root (dir: v, w: fill, h: fill, pad: $space.lg, gap: $space.md,
-               mainAlign: center, crossAlign: stretch, bg: $color.bg.canvas)
-               @expanded(pad: $space.xl, maxW: 480) {
-
-    Text #title (style: $type.heading.lg, color: $color.text.primary, role: heading(1))
-      "Bienvenue"
-
-    Text #subtitle (style: $type.body.md, color: $color.text.secondary, maxLines: 2)
-      slot(subtitle)
-
+  Stack #root (
+    w: fill,
+    h: fill,
+    dir: v,
+    gap: $space.md,
+    pad: $space.lg,
+    mainAlign: center,
+    crossAlign: stretch,
+    bg: $color.bg.canvas
+  ) @expanded(maxW: 480, pad: $space.xl) {
+    Text #title (
+      style: $type.heading.lg,
+      color: $color.text.primary,
+      role: heading(1)
+    ) "Bienvenue"
+    Text #subtitle (
+      style: $type.body.md,
+      color: $color.text.secondary,
+      maxLines: 2
+    ) slot(subtitle)
     Stack #form (dir: v, gap: $space.sm) {
-      Box #email (h: fixed(48), bg: $color.bg.field, radius: $radius.md,
-                  border: ($size.hairline, $color.border.default),
-                  role: textfield, label: "Email")
-      Box #password (h: fixed(48), bg: $color.bg.field, radius: $radius.md,
-                     border: ($size.hairline, $color.border.default),
-                     role: textfield, label: "Mot de passe")
+      Box #email (
+        h: fixed(48),
+        bg: $color.bg.field,
+        radius: $radius.md,
+        border: ($size.hairline, $color.border.default),
+        role: textfield,
+        label: "Email"
+      )
+      Box #password (
+        h: fixed(48),
+        bg: $color.bg.field,
+        radius: $radius.md,
+        border: ($size.hairline, $color.border.default),
+        role: textfield,
+        label: "Mot de passe"
+      )
     }
-
     Stack #actions (dir: h, gap: $space.sm, crossAlign: center) {
-      Stack #primary (dir: h, w: fill, h: fixed(48), mainAlign: center, crossAlign: center,
-                      bg: $color.accent, radius: $radius.md, role: button) {
-        Text #primaryLabel (style: $type.label.md, color: $color.text.onAccent) "Continuer"
+      Stack #primary (
+        w: fill,
+        h: fixed(48),
+        dir: h,
+        mainAlign: center,
+        crossAlign: center,
+        bg: $color.accent,
+        radius: $radius.md,
+        role: button
+      ) {
+        Text #primaryLabel (
+          style: $type.label.md,
+          color: $color.text.onAccent
+        ) "Continuer"
       }
-      Icon #help (name: $icon.help, size: $size.icon.md, color: $color.text.secondary)
+      Icon #help (
+        name: $icon.help,
+        size: $size.icon.md,
+        color: $color.text.secondary
+      )
     }
   }
 }
@@ -623,6 +676,7 @@ Le mode tolérant (`--tolerant`) arrondit les valeurs numériques au token le pl
 | E006 | erreur | Image sans dimension résolvable | typecheck |
 | E007 | erreur | `fill` sous une contrainte infinie (Stack `scroll` sur le même axe, ou racine sans viewport) | layout |
 | E008 | erreur | Frames de breakpoints structurellement différentes | import |
+| E009 | erreur | Erreur de syntaxe (lexème inattendu, fin de fichier prématurée, type de nœud inconnu) | parse |
 | W001 | avert. | `fill` dans un parent `hug`, normalisé en `hug` | normalize |
 | W002 | avert. | Valeur arrondie au token le plus proche (mode tolérant) | import |
 | W003 | avert. | Surcharge sans effet, supprimée | normalize |

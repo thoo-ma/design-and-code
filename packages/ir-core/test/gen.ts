@@ -20,9 +20,9 @@ import type {
  * Générateur `genIR` (spec §8.1) : arbres bien typés, profondeur ≤ 5,
  * largeur ≤ 4, tokens tirés du design system de fixture.
  *
- * En T1 il produit des arbres *bien typés*, pas encore en forme normale :
- * la forme normale `N` arrive en T3 et s'appliquera par composition.
- * Les `#id` présents sont rendus uniques après génération.
+ * Il produit des arbres *bien typés*, pas encore en forme normale : la forme
+ * normale `N` arrive en T3 et s'appliquera par composition. Les `#id`
+ * présents sont rendus uniques après génération.
  */
 
 /** Tokens référençables de `fixtures/design-system/tokens.json`. */
@@ -61,9 +61,15 @@ export function genToken<G extends TokenGroup>(
     .map((path) => ({ group, path }));
 }
 
-const genIdent = fc.stringMatching(/^[a-z][a-zA-Z0-9]{0,7}$/);
+/** IDENT de la spec §3.1, restreint pour rester lisible dans les contre-exemples. */
+const genIdent = fc.stringMatching(/^[a-z][a-zA-Z0-9_-]{0,7}$/);
 
-const genLiteralLength = fc.integer({ min: 0, max: 2000 });
+const genText = fc.string({ unit: "grapheme", maxLength: 40 });
+
+const genLiteralLength = fc.oneof(
+  fc.integer({ min: 0, max: 2000 }),
+  fc.double({ min: 0, max: 2000, noNaN: true, noDefaultInfinity: true }),
+);
 
 export const genSize: fc.Arbitrary<Size> = fc.oneof(
   fc.constant({ kind: "hug" } as const),
@@ -90,9 +96,7 @@ export const genRole: fc.Arbitrary<Role> = fc.oneof(
 );
 
 export const genContent: fc.Arbitrary<Content> = fc.oneof(
-  fc
-    .string({ maxLength: 40 })
-    .map((value) => ({ kind: "literal", value }) as const),
+  genText.map((value) => ({ kind: "literal", value }) as const),
   genIdent.map((name) => ({ kind: "slot", name }) as const),
 );
 
@@ -118,6 +122,8 @@ const genRatio = fc.tuple(
 // fast-check produirait sinon des objets à prototype null, qui ne sont pas
 // du JSON ordinaire et que `toStrictEqual` distingue.
 
+const REC = { noNullPrototype: true } as const;
+
 const dims = { w: genSize, h: genSize };
 const constraints = {
   minW: genLength,
@@ -127,7 +133,7 @@ const constraints = {
 };
 const semantics = {
   role: genRole,
-  label: fc.string({ minLength: 1, maxLength: 20 }),
+  label: fc.string({ unit: "grapheme", minLength: 1, maxLength: 20 }),
 };
 const style = {
   bg: genToken("color"),
@@ -153,6 +159,11 @@ const imageStyle = {
   ratio: genRatio,
   radius: genToken("radius"),
 };
+const iconStyle = {
+  name: genToken("icon"),
+  size: genToken("size"),
+  color: genToken("color"),
+};
 
 const genDir = fc.constantFrom("v", "h");
 
@@ -165,20 +176,20 @@ const genStackProps = fc.record(
     ...stackLayout,
     ...style,
   },
-  { noNullPrototype: true, requiredKeys: ["dir"] },
+  { ...REC, requiredKeys: ["dir"] },
 );
 const genStackOverride = fc.record(
   { ...dims, ...constraints, dir: genDir, ...stackLayout, ...style },
-  { noNullPrototype: true, requiredKeys: [] },
+  { ...REC, requiredKeys: [] },
 );
 
 const genBoxProps = fc.record(
   { ...dims, ...constraints, ...semantics, ...style },
-  { noNullPrototype: true, requiredKeys: [] },
+  { ...REC, requiredKeys: [] },
 );
 const genBoxOverride = fc.record(
   { ...dims, ...constraints, ...style },
-  { noNullPrototype: true, requiredKeys: [] },
+  { ...REC, requiredKeys: [] },
 );
 
 const genTextProps = fc.record(
@@ -190,7 +201,7 @@ const genTextProps = fc.record(
     color: genToken("color"),
     ...textStyle,
   },
-  { noNullPrototype: true, requiredKeys: ["style", "color"] },
+  { ...REC, requiredKeys: ["style", "color"] },
 );
 const genTextOverride = fc.record(
   {
@@ -200,47 +211,30 @@ const genTextOverride = fc.record(
     color: genToken("color"),
     ...textStyle,
   },
-  { noNullPrototype: true, requiredKeys: [] },
+  { ...REC, requiredKeys: [] },
 );
 
 const genImageProps = fc.record(
   { ...dims, ...constraints, ...semantics, ...imageStyle },
-  { noNullPrototype: true, requiredKeys: [] },
+  { ...REC, requiredKeys: [] },
 );
 const genImageOverride = fc.record(
   { ...dims, ...constraints, ...imageStyle },
-  { noNullPrototype: true, requiredKeys: [] },
+  { ...REC, requiredKeys: [] },
 );
 
 const genIconProps = fc.record(
-  {
-    ...constraints,
-    ...semantics,
-    name: genToken("icon"),
-    size: genToken("size"),
-    color: genToken("color"),
-  },
-  { noNullPrototype: true, requiredKeys: ["name", "size", "color"] },
+  { ...semantics, ...iconStyle },
+  { ...REC, requiredKeys: ["name", "size", "color"] },
 );
-const genIconOverride = fc.record(
-  {
-    ...constraints,
-    name: genToken("icon"),
-    size: genToken("size"),
-    color: genToken("color"),
-  },
-  { noNullPrototype: true, requiredKeys: [] },
-);
+const genIconOverride = fc.record(iconStyle, { ...REC, requiredKeys: [] });
 
 /** Au plus une surcharge, sur le seul breakpoint non-base de la v0. */
 function genOverrides<P>(
   props: fc.Arbitrary<P>,
 ): fc.Arbitrary<{ breakpoint: string; props: P }[]> {
   return fc.array(
-    fc.record(
-      { breakpoint: fc.constant("expanded"), props },
-      { noNullPrototype: true },
-    ),
+    fc.record({ breakpoint: fc.constant("expanded"), props }, REC),
     {
       maxLength: 1,
     },
@@ -263,7 +257,7 @@ const tree = fc.letrec<{
         props: genBoxProps,
         overrides: genOverrides(genBoxOverride),
       },
-      { noNullPrototype: true, requiredKeys: ["type", "props", "overrides"] },
+      { ...REC, requiredKeys: ["type", "props", "overrides"] },
     ),
     fc.record(
       {
@@ -273,10 +267,7 @@ const tree = fc.letrec<{
         overrides: genOverrides(genTextOverride),
         content: genContent,
       },
-      {
-        noNullPrototype: true,
-        requiredKeys: ["type", "props", "overrides", "content"],
-      },
+      { ...REC, requiredKeys: ["type", "props", "overrides", "content"] },
     ),
     fc.record(
       {
@@ -286,10 +277,7 @@ const tree = fc.letrec<{
         overrides: genOverrides(genImageOverride),
         content: genContent,
       },
-      {
-        noNullPrototype: true,
-        requiredKeys: ["type", "props", "overrides", "content"],
-      },
+      { ...REC, requiredKeys: ["type", "props", "overrides", "content"] },
     ),
     fc.record(
       {
@@ -298,7 +286,7 @@ const tree = fc.letrec<{
         props: genIconProps,
         overrides: genOverrides(genIconOverride),
       },
-      { noNullPrototype: true, requiredKeys: ["type", "props", "overrides"] },
+      { ...REC, requiredKeys: ["type", "props", "overrides"] },
     ),
   ),
   stack: fc.record(
@@ -309,10 +297,7 @@ const tree = fc.letrec<{
       overrides: genOverrides(genStackOverride),
       children: fc.array(tie("node"), { maxLength: MAX_WIDTH }),
     },
-    {
-      noNullPrototype: true,
-      requiredKeys: ["type", "props", "overrides", "children"],
-    },
+    { ...REC, requiredKeys: ["type", "props", "overrides", "children"] },
   ),
   // Au-delà de MAX_DEPTH seule la première alternative (feuille) est tirée.
   node: fc.oneof(
@@ -326,34 +311,18 @@ const tree = fc.letrec<{
 function withUniqueIds(screen: Screen): Screen {
   let next = 0;
   const visit = (node: Node): Node => {
-    const renamed = node.id === undefined ? {} : { id: `n${++next}` };
-    switch (node.type) {
-      case "Stack": {
-        const { id: _dropped, ...rest } = node;
-        void _dropped;
-        return { ...rest, ...renamed, children: node.children.map(visit) };
-      }
-      case "Box":
-      case "Text":
-      case "Image":
-      case "Icon": {
-        const { id: _dropped, ...rest } = node;
-        void _dropped;
-        return { ...rest, ...renamed };
-      }
+    const { id, ...rest } = node;
+    const renamed = id === undefined ? {} : { id: `n${String(++next)}` };
+    if (rest.type === "Stack") {
+      return { ...rest, ...renamed, children: rest.children.map(visit) };
     }
+    return { ...rest, ...renamed };
   };
-  return { ...screen, children: screen.children.map(visit) };
+  return { ...screen, root: visit(screen.root) };
 }
 
 export const genNode: fc.Arbitrary<Node> = tree.node;
 
 export const genIR: fc.Arbitrary<Screen> = fc
-  .record(
-    {
-      name: genIdent,
-      children: fc.array(genNode, { maxLength: MAX_WIDTH }),
-    },
-    { noNullPrototype: true },
-  )
+  .record({ name: genIdent, root: genNode }, REC)
   .map(withUniqueIds);

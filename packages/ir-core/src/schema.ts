@@ -175,7 +175,7 @@ export const StackPropsSchema: z.ZodType<StackProps> = z.strictObject({
   ...style,
 });
 
-const StackOverridableSchema: z.ZodType<Overridable<StackProps>> =
+export const StackOverridableSchema: z.ZodType<Overridable<StackProps>> =
   z.strictObject({
     ...dims,
     ...constraints,
@@ -191,11 +191,12 @@ export const BoxPropsSchema: z.ZodType<BoxProps> = z.strictObject({
   ...style,
 });
 
-const BoxOverridableSchema: z.ZodType<Overridable<BoxProps>> = z.strictObject({
-  ...dims,
-  ...constraints,
-  ...style,
-});
+export const BoxOverridableSchema: z.ZodType<Overridable<BoxProps>> =
+  z.strictObject({
+    ...dims,
+    ...constraints,
+    ...style,
+  });
 
 export const TextPropsSchema: z.ZodType<TextProps> = z.strictObject({
   ...dims,
@@ -206,15 +207,14 @@ export const TextPropsSchema: z.ZodType<TextProps> = z.strictObject({
   ...textStyle,
 });
 
-const TextOverridableSchema: z.ZodType<Overridable<TextProps>> = z.strictObject(
-  {
+export const TextOverridableSchema: z.ZodType<Overridable<TextProps>> =
+  z.strictObject({
     ...dims,
     ...constraints,
     style: TypographyTokenSchema.exactOptional(),
     color: ColorTokenSchema.exactOptional(),
     ...textStyle,
-  },
-);
+  });
 
 export const ImagePropsSchema: z.ZodType<ImageProps> = z.strictObject({
   ...dims,
@@ -223,7 +223,7 @@ export const ImagePropsSchema: z.ZodType<ImageProps> = z.strictObject({
   ...imageStyle,
 });
 
-const ImageOverridableSchema: z.ZodType<Overridable<ImageProps>> =
+export const ImageOverridableSchema: z.ZodType<Overridable<ImageProps>> =
   z.strictObject({
     ...dims,
     ...constraints,
@@ -231,21 +231,18 @@ const ImageOverridableSchema: z.ZodType<Overridable<ImageProps>> =
   });
 
 export const IconPropsSchema: z.ZodType<IconProps> = z.strictObject({
-  ...constraints,
   ...semantics,
   name: IconTokenSchema,
   size: SizeTokenSchema,
   color: ColorTokenSchema,
 });
 
-const IconOverridableSchema: z.ZodType<Overridable<IconProps>> = z.strictObject(
-  {
-    ...constraints,
+export const IconOverridableSchema: z.ZodType<Overridable<IconProps>> =
+  z.strictObject({
     name: IconTokenSchema.exactOptional(),
     size: SizeTokenSchema.exactOptional(),
     color: ColorTokenSchema.exactOptional(),
-  },
-);
+  });
 
 // ---------------------------------------------------------------------------
 // Nœuds et document
@@ -308,5 +305,5 @@ const IconNodeSchema = z.strictObject({
 
 export const ScreenSchema: z.ZodType<Screen> = z.strictObject({
   name: ident,
-  children: z.array(NodeSchema),
+  root: NodeSchema,
 });

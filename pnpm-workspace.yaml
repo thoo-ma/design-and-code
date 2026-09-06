@@ -3,6 +3,7 @@ packages:
 
 # Versions partagées par tous les packages (protocole `catalog:`).
 catalog:
+  "@types/node": ^24.0.0
   fast-check: ^4.9.0
   typescript: ~6.0.3
   vitest: ^5.0.0

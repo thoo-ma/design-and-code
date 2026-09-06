@@ -169,10 +169,10 @@ export interface ImageProps extends CommonProps {
 }
 
 /**
- * Spec §4.6. `w` et `h` valent implicitement `fixed(size)` et ne sont pas
- * exprimables ; les autres propriétés communes restent disponibles.
+ * Spec §4.6. `w`, `h` et les contraintes min/max valent implicitement
+ * `fixed(size)` et ne sont pas exprimables ; `role` et `label` restent.
  */
-export interface IconProps extends Omit<CommonProps, "w" | "h"> {
+export interface IconProps extends Pick<CommonProps, "role" | "label"> {
   readonly name: IconToken;
   readonly size: SizeToken;
   readonly color: ColorToken;
@@ -239,8 +239,11 @@ export type Node = StackNode | BoxNode | TextNode | ImageNode | IconNode;
 // Document (spec §2, §3.1)
 // ---------------------------------------------------------------------------
 
-/** `screen IDENT { node* }`. Un fichier `.ir` décrit exactement un écran. */
+/**
+ * `screen IDENT { node }`. Un fichier `.ir` décrit exactement un écran, qui
+ * contient exactement un nœud racine (spec §3.1).
+ */
 export interface Screen {
   readonly name: string;
-  readonly children: readonly Node[];
+  readonly root: Node;
 }

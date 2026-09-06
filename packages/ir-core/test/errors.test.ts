@@ -13,7 +13,7 @@ import type { DiagnosticCode, IRError } from "../src/index.js";
 const ALL_CODES: readonly DiagnosticCode[] = [...ERROR_CODES, ...WARNING_CODES];
 
 describe("codes de diagnostic (spec §12)", () => {
-  it("exactement E001…E008 et W001…W003", () => {
+  it("exactement E001…E009 et W001…W003", () => {
     expectTypeOf<DiagnosticCode>().toEqualTypeOf<
       | "E001"
       | "E002"
@@ -23,11 +23,12 @@ describe("codes de diagnostic (spec §12)", () => {
       | "E006"
       | "E007"
       | "E008"
+      | "E009"
       | "W001"
       | "W002"
       | "W003"
     >();
-    expect(ALL_CODES).toHaveLength(11);
+    expect(ALL_CODES).toHaveLength(12);
     expect(Object.keys(DIAGNOSTICS).sort()).toEqual([...ALL_CODES].sort());
   });
 

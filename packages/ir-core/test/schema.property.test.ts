@@ -48,15 +48,15 @@ describe("schéma zod × genIR (spec §8.1)", () => {
   it("genIR respecte ses bornes : ids uniques, profondeur ≤ 5, largeur ≤ 4", () => {
     fc.assert(
       fc.property(genIR, (screen: Screen) => {
-        const ids = collectIds(screen.children);
+        const ids = collectIds([screen.root]);
         expect(new Set(ids).size).toBe(ids.length);
-        expect(depthOf(screen.children)).toBeLessThanOrEqual(5 + 1);
+        expect(depthOf([screen.root])).toBeLessThanOrEqual(5 + 1);
         const widths: number[] = [];
         const walk = (nodes: readonly Node[]): void => {
           widths.push(nodes.length);
           for (const n of nodes) if (n.type === "Stack") walk(n.children);
         };
-        walk(screen.children);
+        walk([screen.root]);
         expect(Math.max(0, ...widths)).toBeLessThanOrEqual(4);
       }),
       { numRuns: 200 },
@@ -73,7 +73,7 @@ describe("schéma zod × genIR (spec §8.1)", () => {
             if (n.type === "Stack") walk(n.children);
           }
         };
-        walk(screen.children);
+        walk([screen.root]);
         fc.pre(nodes.length > 0);
         const victim = nodes[seed % nodes.length];
         expect(victim).toBeDefined();
