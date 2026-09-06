@@ -4,7 +4,8 @@
  * Vérifie que chaque token cité existe, est référençable et a le type DTCG
  * attendu par son groupe (E002) ; que chaque breakpoint surchargé existe
  * (E002) ; que chaque `Image` a ses deux axes résolvables à chaque
- * breakpoint (E006). Pur ; les positions viennent de la table de `parse`.
+ * breakpoint (E006) ; qu'aucun enfant `fill` ne soit sur l'axe de défilement
+ * d'un Stack `scroll` (E007, ADR-008). Pur ; les positions viennent de `parse`.
  */
 
 import { TOKEN_GROUPS } from "./ast.js";
@@ -30,7 +31,7 @@ export function typecheck(
       node.id ?? `${node.type}[${String(indices[indices.length - 1] ?? 0)}]`;
     const path = parentPath === "" ? segment : `${parentPath}/${segment}`;
     const pos = positions?.get(indexPath(indices));
-    const report = (code: "E002" | "E006", message: string): void => {
+    const report = (code: "E002" | "E006" | "E007", message: string): void => {
       errors.push(irError(code, path, message, pos));
     };
 
@@ -105,6 +106,34 @@ export function typecheck(
     }
 
     if (node.type === "Stack") {
+      // E007 statique (ADR-008) : enfant fill sur l'axe de défilement d'un Stack scroll.
+      for (const bp of ["", ...node.overrides.map((o) => o.breakpoint)]) {
+        const own = node.overrides.find((o) => o.breakpoint === bp);
+        const eff =
+          own === undefined ? node.props : { ...node.props, ...own.props };
+        if (eff.overflow !== "scroll") continue;
+        const main = eff.dir === "h" ? "w" : "h";
+        node.children.forEach((child, k) => {
+          if (child.type === "Icon") return;
+          const childOverride = child.overrides.find(
+            (o) => o.breakpoint === bp,
+          );
+          const childEff =
+            childOverride === undefined
+              ? child.props
+              : { ...child.props, ...childOverride.props };
+          if (childEff[main]?.kind !== "fill") return;
+          const segment = child.id ?? `${child.type}[${String(k)}]`;
+          errors.push(
+            irError(
+              "E007",
+              `${path}/${segment}`,
+              `${main}: fill sur l'axe de défilement de son parent scroll${bp === "" ? "" : ` (@${bp})`} (ADR-008) : mettre fixed ou hug, ou retirer scroll du parent.`,
+              positions?.get(indexPath([...indices, k])),
+            ),
+          );
+        });
+      }
       node.children.forEach((child, k) => {
         visit(child, [...indices, k], path);
       });

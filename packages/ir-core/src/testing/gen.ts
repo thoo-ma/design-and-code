@@ -347,9 +347,16 @@ export function generatorsFor(ds: DesignSystem): Generators {
   const genNode: fc.Arbitrary<Node> = tree.node;
   const genRawIR: fc.Arbitrary<Screen> = fc
     .record({ name: genIdent, root: genNode }, REC)
-    .map(withUniqueIds);
+    .map(withUniqueIds)
+    .map(repairScroll)
+    .map(repairImages);
+  // N, puis scroll (peut passer un parent en hug), puis N (la règle 1 propage),
+  // puis images, puis N : plus aucun fill ne change après la dernière réparation.
   const genIR: fc.Arbitrary<Screen> = genRawIR.map(
-    (screen) => normalize(repairImages(normalize(screen).screen)).screen,
+    (screen) =>
+      normalize(
+        repairImages(normalize(repairScroll(normalize(screen).screen)).screen),
+      ).screen,
   );
 
   return { genToken, genNode, genRawIR, genIR };
@@ -394,6 +401,56 @@ function repairImages(screen: Screen): Screen {
       props: { ...o.props, ...missing({ ...props, ...o.props }) },
     }));
     return { ...node, props, overrides };
+  };
+  return { ...screen, root: visit(screen.root) };
+}
+
+/**
+ * Un enfant `fill` sur l'axe de défilement d'un Stack `scroll` est E007
+ * (ADR-008). Le générateur le passe en `hug` à ce breakpoint.
+ */
+function repairScroll(screen: Screen): Screen {
+  const breakpoints = new Set<string>([""]);
+  const collect = (node: Node): void => {
+    for (const o of node.overrides) breakpoints.add(o.breakpoint);
+    if (node.type === "Stack") node.children.forEach(collect);
+  };
+  collect(screen.root);
+
+  const effective = <P extends object>(
+    base: P,
+    overrides: readonly { breakpoint: string; props: Partial<P> }[],
+    bp: string,
+  ): P => {
+    const o = overrides.find((x) => x.breakpoint === bp);
+    return o === undefined ? base : { ...base, ...o.props };
+  };
+
+  const visit = (node: Node): Node => {
+    if (node.type !== "Stack") return node;
+    let children = node.children.map(visit);
+    for (const bp of breakpoints) {
+      const eff = effective(node.props, node.overrides, bp);
+      if (eff.overflow !== "scroll") continue;
+      const main = eff.dir === "h" ? "w" : "h";
+      children = children.map((child) => {
+        if (child.type === "Icon") return child;
+        const childEff = effective(child.props, child.overrides, bp);
+        if (childEff[main]?.kind !== "fill") return child;
+        const hug = { kind: "hug" } as const;
+        if (bp === "") {
+          return { ...child, props: { ...child.props, [main]: hug } } as Node;
+        }
+        const others = child.overrides.filter((o) => o.breakpoint !== bp);
+        const own = child.overrides.find((o) => o.breakpoint === bp);
+        const overrides = [
+          ...others,
+          { breakpoint: bp, props: { ...(own?.props ?? {}), [main]: hug } },
+        ];
+        return { ...child, overrides } as Node;
+      });
+    }
+    return { ...node, children };
   };
   return { ...screen, root: visit(screen.root) };
 }
