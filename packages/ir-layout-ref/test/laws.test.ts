@@ -97,34 +97,55 @@ describe("layout de référence × genIR (spec §5, §8.1)", () => {
     );
   });
 
-  it("un Stack hug sans min/max ni scroll contient exactement ses enfants, gaps et padding compris", () => {
+  it("un Stack hug, non étiré, sans min/max ni scroll, contient ses enfants", () => {
     fc.assert(
       fc.property(genIR, genViewport, (raw: Screen, viewport) => {
         const { g, screen } = geometryOf(raw, viewport);
-        walk(screen.root, [], (node, indices) => {
-          if (node.type !== "Stack" || node.children.length === 0) return;
-          const p = node.props;
-          const main = p.dir === "h" ? "w" : "h";
-          const pos = p.dir === "h" ? "x" : "y";
-          const mode = p[main] ?? { kind: "hug" };
-          const bounded =
-            main === "w"
-              ? p.minW !== undefined || p.maxW !== undefined
-              : p.minH !== undefined || p.maxH !== undefined;
-          if (mode.kind !== "hug" || bounded || p.overflow === "scroll") return;
-          const self = rectOf(g, node, indices);
-          const children = node.children.map((c, k) =>
-            rectOf(g, c, [...indices, k]),
-          );
-          const first = children[0];
-          const last = children[children.length - 1];
-          if (first === undefined || last === undefined) return;
-          // Les enfants tiennent dans le Stack, et le dernier finit au padding près de sa fin.
-          expect(first[pos]).toBeGreaterThanOrEqual(self[pos] - 1e-6);
-          expect(last[pos] + last[main]).toBeLessThanOrEqual(
-            self[pos] + self[main] + 1e-6,
-          );
-        });
+        const visit = (
+          node: Node,
+          indices: readonly number[],
+          parent: Node | undefined,
+        ): void => {
+          if (node.type === "Stack") {
+            const p = node.props;
+            const main = p.dir === "h" ? "w" : "h";
+            const pos = p.dir === "h" ? "x" : "y";
+            const mode = p[main] ?? { kind: "hug" };
+            const bounded =
+              main === "w"
+                ? p.minW !== undefined || p.maxW !== undefined
+                : p.minH !== undefined || p.maxH !== undefined;
+            // Étiré par le parent sur cet axe : de fait fill, plus hug (§5.2, étape 6).
+            const stretched =
+              parent?.type === "Stack" &&
+              (parent.props.crossAlign ?? "start") === "stretch" &&
+              (parent.props.dir === "h" ? "h" : "w") === main;
+            if (
+              mode.kind === "hug" &&
+              !bounded &&
+              !stretched &&
+              p.overflow !== "scroll" &&
+              node.children.length > 0
+            ) {
+              const self = rectOf(g, node, indices);
+              const children = node.children.map((c, k) =>
+                rectOf(g, c, [...indices, k]),
+              );
+              const first = children[0];
+              const last = children[children.length - 1];
+              if (first !== undefined && last !== undefined) {
+                expect(first[pos]).toBeGreaterThanOrEqual(self[pos] - 1e-6);
+                expect(last[pos] + last[main]).toBeLessThanOrEqual(
+                  self[pos] + self[main] + 1e-6,
+                );
+              }
+            }
+            node.children.forEach((c, k) => {
+              visit(c, [...indices, k], node);
+            });
+          }
+        };
+        visit(screen.root, [], undefined);
       }),
       { numRuns: 300 },
     );

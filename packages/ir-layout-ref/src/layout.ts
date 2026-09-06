@@ -386,6 +386,10 @@ class Layout {
     let sFill = 0;
     if (fills.length > 0) {
       let reste = Math.max(0, disponibleMain - sFixed - sHug);
+      // Une contrainte infinie n'est définitive que si elle vient de scroll (ADR-008).
+      // Sinon elle est transitoire : mesure provisoire d'un ancêtre étiré, remesuré à
+      // l'étape 6 avec une contrainte finie ; le fill vaut 0 en attendant, comme flexbox.
+      if (!Number.isFinite(reste) && p.overflow !== "scroll") reste = 0;
       if (!Number.isFinite(reste)) {
         for (const i of fills) {
           const child = node.children[i];

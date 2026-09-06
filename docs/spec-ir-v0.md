@@ -227,14 +227,16 @@ measure(node, maxW, maxH) -> (w, h)
         fixed(n) -> n ; fill -> available(w, maxW) ; hug -> available(w, maxW)
         (mesure en une ligne si la largeur disponible est ∞)
      (tw, th) = platform.measureText(texte, style, largeur disponible, maxLines)
-     w = selon mode w : fixed(n) -> n ; fill -> maxW (E007 si ∞) ; hug -> tw
-     h = selon mode h : fixed(n) -> n ; fill -> maxH (E007 si ∞) ; hug -> th
+     w = selon mode w : fixed(n) -> n ; fill -> maxW ; hug -> tw
+     h = selon mode h : fixed(n) -> n ; fill -> maxH ; hug -> th
+        (une feuille fill ne reçoit jamais ∞ en forme normale : son parent lui donne une
+        part finie sur main, et la mesure comme hug puis la remesure de l'étape 6 sur cross)
      borner par min/max ; retourner (w, h)
 
   si node est Image ou Box :
      intrinsèque = (0, 0)                   -- l'asset n'est pas connu du layout de référence
-     w = selon mode w : fixed(n) -> n ; fill -> maxW (E007 si ∞) ; hug -> intrinsèque.w
-     h = selon mode h : fixed(n) -> n ; fill -> maxH (E007 si ∞) ; hug -> intrinsèque.h
+     w = selon mode w : fixed(n) -> n ; fill -> maxW ; hug -> intrinsèque.w
+     h = selon mode h : fixed(n) -> n ; fill -> maxH ; hug -> intrinsèque.h
      si un seul axe est résolu (fixed ou fill) et ratio existe : dériver l'autre
      borner par min/max ; retourner (w, h)
 
@@ -253,7 +255,11 @@ measure(node, maxW, maxH) -> (w, h)
      2. enfants hug sur main : mesurer avec (∞ sur main, innerMax.cross) ; somme -> S_hug
         (un enfant hug reçoit la contrainte du Stack sur cross, finie ou non ;
         c'est ce qui fait qu'un texte se replie à la largeur de son parent)
-     3. reste = max(0, disponibleMain - S_fixed - S_hug)     -- E007 si reste = ∞ et nbFill > 0
+     3. reste = max(0, disponibleMain - S_fixed - S_hug)
+        si reste = ∞ et nbFill > 0 : E007 si l'infini vient de overflow: scroll (ADR-008) ;
+        sinon il est transitoire (mesure provisoire d'un ancêtre étiré, remesuré à l'étape 6
+        avec une contrainte finie) et reste = 0 en attendant, comme flexbox avec une taille
+        indéfinie
         enfants fill sur main : part = reste / nbFill ; mesurer avec (part, innerMax.cross).
         Si un enfant fill est borné par son min/max sur main, sa taille est gelée à la borne,
         retirée du reste, et les parts des autres sont recalculées, jusqu'à ce que plus aucun
@@ -261,11 +267,11 @@ measure(node, maxW, maxH) -> (w, h)
      4. taille main du Stack :
         fixed(n) -> n
         hug      -> S_fixed + S_hug + S_fill + gaps + padding
-        fill     -> max.main   (E007 si max.main = ∞)
+        fill     -> max.main   (fini en forme normale, voir l'étape 3 ; E007 sinon)
      5. taille cross du Stack :
         fixed(n) -> n
         hug      -> max des tailles cross de tous les enfants (provisoires pour les fill) + padding
-        fill     -> max.cross  (E007 si max.cross = ∞)
+        fill     -> max.cross  (fini en forme normale ; E007 sinon)
      borner par min/max
      6. enfants fill sur cross, ou hug sur cross si crossAlign: stretch :
         re-mesurer comme fill sur cross, avec cross = innerCross du Stack et la même
