@@ -189,6 +189,47 @@ describe("E002 — tokens, icônes et breakpoints", () => {
   });
 });
 
+describe("E004 — slots de même nom et de types différents (spec §9.3)", () => {
+  it("un slot Text et un slot Image du même nom", () => {
+    const root: Node = {
+      type: "Stack",
+      id: "root",
+      props: { dir: "v" },
+      overrides: [],
+      children: [
+        {
+          type: "Text",
+          id: "t",
+          props: {
+            style: { group: "type", path: ["body", "md"] },
+            color: { group: "color", path: ["text", "primary"] },
+          },
+          overrides: [],
+          content: { kind: "slot", name: "x" },
+        },
+        {
+          type: "Image",
+          id: "i",
+          props: { w: { kind: "fill" }, h: { kind: "fixed", value: 100 } },
+          overrides: [],
+          content: { kind: "slot", name: "x" },
+        },
+        {
+          type: "Text",
+          id: "u",
+          props: {
+            style: { group: "type", path: ["body", "md"] },
+            color: { group: "color", path: ["text", "primary"] },
+          },
+          overrides: [],
+          content: { kind: "slot", name: "x" },
+        },
+      ],
+    };
+    expect(show(typecheck(screen(root), ds))).toStrictEqual(["E004 root/i"]);
+  });
+});
+
 describe("E006 — Image sans dimension résolvable (spec §4.5)", () => {
   const fill = { kind: "fill" } as const;
   const fixed = { kind: "fixed", value: 100 } as const;

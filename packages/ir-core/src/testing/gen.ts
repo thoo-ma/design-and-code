@@ -119,6 +119,11 @@ export function generatorsFor(ds: DesignSystem): Generators {
     genText.map((value) => ({ kind: "literal", value }) as const),
     genIdent.map((name) => ({ kind: "slot", name }) as const),
   );
+  /** Slots d'Image en majuscule initiale : jamais le nom d'un slot de Text (§9.3). */
+  const genImageContent: fc.Arbitrary<Content> = fc.oneof(
+    genText.map((value) => ({ kind: "literal", value }) as const),
+    genIdent.map((name) => ({ kind: "slot", name: `I${name}` }) as const),
+  );
 
   const genPad = fc.oneof(
     genToken("space"),
@@ -308,7 +313,7 @@ export function generatorsFor(ds: DesignSystem): Generators {
           id: genIdent,
           props: genImageProps,
           overrides: genOverrides(genImageOverride),
-          content: genContent,
+          content: genImageContent,
         },
         { ...REC, requiredKeys: ["type", "props", "overrides", "content"] },
       ),

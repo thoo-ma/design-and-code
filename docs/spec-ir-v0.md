@@ -171,9 +171,9 @@ Toutes les propriétés de style de Stack (`bg`, `radius`, `border`, `shadow`, `
 | `color` | `$color.*` | requis |
 | `align` | `start` \| `center` \| `end` | `start` |
 | `maxLines` | entier ≥ 1 | aucun (illimité) |
-| `truncate` | `none` \| `end` | `end` si `maxLines`, sinon `none` |
+| `truncate` | `none` \| `end` | `end` si `maxLines`, sinon sans effet |
 
-Contenu : littéral (placeholder) ou `slot(nom)`. Taille intrinsèque : celle du texte mesuré dans le style, avec retour à la ligne si la largeur est contrainte. La mesure du texte est fournie par la plateforme (§5.3).
+Contenu : littéral (placeholder) ou `slot(nom)`. Taille intrinsèque : celle du texte mesuré dans le style, avec retour à la ligne si la largeur est contrainte. La mesure du texte est fournie par la plateforme (§5.3). `truncate` n'a d'effet qu'avec `maxLines` : `end` termine la dernière ligne par une ellipse, `none` coupe net.
 
 ### 4.5 Image
 
@@ -317,7 +317,7 @@ Règles, appliquées dans cet ordre :
 1. **Élimination de fill-in-hug.** Un enfant `fill` sur un axe où son parent Stack est `hug` sur le même axe devient `hug`, sauf si ce parent est lui-même étiré sur cet axe par son propre parent (`crossAlign: stretch` du grand-parent, l'axe étant l'axe secondaire du grand-parent) : un Stack étiré dispose de l'espace et ses enfants `fill` le remplissent, c'est le cas de `#primary` dans `#actions` en §10. La règle s'évalue breakpoint par breakpoint sur les propriétés résolues (base plus surcharge), et le résultat est réencodé en base plus surcharges. Chaque changement produit un avertissement W001. (Figma applique la même règle silencieusement.)
 2. **Élimination des défauts.** Toute propriété de base égale à sa valeur par défaut est omise. L'égalité est sémantique : `pad: ($space.none, $space.none)` vaut le défaut. Une propriété n'est omise que si sa résolution (défauts de §4 compris, dont celui de `truncate`) est la même à chaque breakpoint avec et sans elle.
 3. **Élimination des surcharges vides.** Une propriété de surcharge dont la résolution au breakpoint est la même avec et sans elle est omise. Un `@bp(...)` devenu vide est supprimé, avec un avertissement W003.
-4. **Résolution de `truncate`.** Le défaut de `truncate` dépend de `maxLines` (§4.4). Par la règle 2 : `truncate: end` est omis si `maxLines` est présent ; `truncate: none` sans `maxLines` est omis, sauf si une surcharge ajoute `maxLines`, auquel cas `none` porte un sens et reste.
+4. **Résolution de `truncate`.** `truncate` se résout à `none` sans `maxLines` (sans effet), et à sa valeur, `end` par défaut, avec `maxLines` (§4.4). Par la règle 2 : `truncate: end` est omis si `maxLines` est présent ; sans `maxLines`, `truncate` est omis quelle que soit sa valeur, sauf si une surcharge ajoute `maxLines`, auquel cas `none` porte un sens à ce breakpoint et reste.
 5. **Ordre canonique des propriétés.** L'ordre est celui des tables de §4, `w`/`h` d'abord, puis contraintes, puis propriétés du type, puis style, puis `role`/`label`.
 6. **Identifiants.** Un nœud sans `#id` reçoit `#n_<hash>`, où le hash est FNV-1a 32 bits, sur huit chiffres hexadécimaux, de la chaîne `type:i1/i2/…` formée de son type et de son chemin d'indices depuis la racine (chemin vide pour la racine, donc `Stack:`). Déterministe, donc stable tant que la structure ne change pas. Si l'identifiant obtenu existe déjà dans le document, le chemin d'indices lui est ajouté en suffixe (`_i1_i2`), autant de fois que nécessaire.
 7. **Padding.** `pad: ($a, $b, $a, $b)` devient `pad: ($a, $b)`, puis `pad: ($a, $a)` devient `pad: $a`. Deux tokens sont égaux s'ils ont le même groupe et le même chemin.
@@ -387,6 +387,8 @@ Login.tsx            zone préservée : composant Login, logique, passe les slot
 Login.stories.tsx    zone générée : story avec les placeholders
 ```
 
+`Login.tsx` est écrit une seule fois, à la première compilation, puis jamais réécrit. Un fichier `ir-support.tsx`, un par projet, fournit `Icon` (sprite SVG, noms `web` de `icons.json`) et le type `ImageSource` (ADR-009).
+
 `decompile_css` lit `Login.gen.tsx` et `Login.gen.module.css` uniquement.
 
 ### 9.2 Backend SwiftUI
@@ -401,7 +403,7 @@ LoginView.swift         zone préservée : struct LoginView, @State, logique, in
 
 ### 9.3 Slots
 
-Un `slot(nom)` sur un `Text` devient un paramètre `nom: String`. Sur une `Image`, un paramètre `nom: ImageSource` (type défini dans un support library minimal, un fichier par backend). Le placeholder correspondant alimente la story ou le `#Preview`. Un slot non fourni par la zone préservée est une erreur de compilation du langage cible, pas de l'IR : c'est le système de types du code qui garde cette frontière.
+Un `slot(nom)` sur un `Text` devient un paramètre `nom: String`. Sur une `Image`, un paramètre `nom: ImageSource` (type défini dans un support library minimal, un fichier par backend). Deux slots de même nom désignent le même paramètre et doivent être du même type (E004 au typecheck). Les valeurs d'exemple des slots ne sont pas dans l'IR : le compilateur les reçoit en option pour la story ou le `#Preview`, et prend le nom du slot à défaut. Un slot non fourni par la zone préservée est une erreur de compilation du langage cible, pas de l'IR : c'est le système de types du code qui garde cette frontière.
 
 ### 9.4 Identifiants
 
@@ -485,29 +487,70 @@ Note : `#form` porte `crossAlign: stretch` parce que ses champs, des `Box` sans 
 
 ### 10.2 Sortie CSS (extrait)
 
+Extraits verbatim de `examples/Login.gen.module.css` et `examples/Login.gen.tsx`, tels que `ir-backend-css` les produit ; le golden test vérifie que chaque bloc ci-dessous est un extrait de la sortie.
+
 ```css
 .root {
-  display: flex; flex-direction: column;
-  width: 100%; height: 100%;
-  padding: var(--space-lg); gap: var(--space-md);
-  justify-content: center; align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-lg);
+  gap: var(--space-md);
+  justify-content: center;
+  align-items: stretch;
   background: var(--color-bg-canvas);
 }
+
 @media (min-width: 600px) {
-  .root { padding: var(--space-xl); max-width: 480px; }
+  .root {
+    max-width: 480px;
+    padding: var(--space-xl);
+  }
 }
-.form { display: flex; flex-direction: column; gap: var(--space-sm); align-items: stretch; }
+```
+
+```css
+.form {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  gap: var(--space-sm);
+  align-items: stretch;
+}
+```
+
+```css
 .email {
   height: 48px;
-  background: var(--color-bg-field); border-radius: var(--radius-md);
+  flex-shrink: 0;
+  background: var(--color-bg-field);
+  border-radius: var(--radius-md);
   border: var(--size-hairline) solid var(--color-border-default);
 }
-.actions { display: flex; flex-direction: row; gap: var(--space-sm); align-items: center; }
+```
+
+```css
+.actions {
+  display: flex;
+  flex-direction: row;
+  flex: 0 0 auto;
+  gap: var(--space-sm);
+  align-items: center;
+}
+```
+
+```css
 .primary {
-  display: flex; flex-direction: row;
-  flex: 1 1 0; height: 48px;
-  justify-content: center; align-items: center;
-  background: var(--color-accent); border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 48px;
+  justify-content: center;
+  align-items: center;
+  background: var(--color-accent);
+  border-radius: var(--radius-md);
 }
 ```
 
@@ -525,14 +568,14 @@ export function LoginLayout({ subtitle }: { subtitle: string }) {
         <div className={s.primary} data-ir="primary" role="button">
           <span className={s.primaryLabel} data-ir="primaryLabel">Continuer</span>
         </div>
-        <Icon name="help" className={s.help} data-ir="help" />
+        <Icon name="help-circle" className={s.help} data-ir="help" />
       </div>
     </div>
   );
 }
 ```
 
-Le littéral "Bienvenue" est compilé en dur parce que c'est un placeholder sur un nœud sans slot : il est design-owned. Si le titre devait venir des données, le design l'aurait écrit `slot(title)`.
+Le littéral "Bienvenue" est compilé en dur parce que c'est un placeholder sur un nœud sans slot : il est design-owned. Si le titre devait venir des données, le design l'aurait écrit `slot(title)`. Les champs `#email` et `#password`, `fixed` en hauteur sur l'axe principal de `#form`, portent `flex-shrink: 0` ; `#primary`, `fill` sur l'axe principal de `#actions`, porte `flex: 1 1 0` et `min-width: 0` : sans ces deux déclarations, CSS rétrécirait là où le layout de référence ne rétrécit pas.
 
 ### 10.3 Sortie SwiftUI (extrait)
 
@@ -599,33 +642,44 @@ Deux points à retenir sur cette sortie :
 
 ### 11.1 IR → CSS
 
+Cible React + CSS Modules (ADR-009). Chaque nœud a une classe nommée par son `#id` dans `X.gen.module.css`, et un élément portant `className={s.id}` et `data-ir="id"` dans `X.gen.tsx`. Les déclarations sont émises une par ligne, dans l'ordre de cette table ; c'est ce qui rend la décompilation un parsing de forme.
+
 | IR | CSS |
 |---|---|
 | `Stack(dir: v)` | `display: flex; flex-direction: column` |
 | `Stack(dir: h)` | `display: flex; flex-direction: row` |
-| `gap: $t` | `gap: var(--t)` |
-| `pad: ...` | `padding: ...` |
-| `w: fixed(n)` | `width: n px; flex-shrink: 0` (si sur main) |
+| `w: fixed(n)` | `width: n px` ou `var(--size-x)`, plus `flex-shrink: 0` si l'axe est l'axe principal du parent |
 | `w: hug` (main) | `flex: 0 0 auto` |
-| `w: hug` (cross) | `align-self: flex-start` (sauf si parent `stretch`) |
-| `w: fill` (main) | `flex: 1 1 0; min-width: 0` |
+| `w: hug` (cross) | rien : `align-items` du parent, toujours émis, s'applique |
+| `w: fill` (main) | `flex: 1 1 0; min-width: 0` (`min-height: 0` en colonne) |
 | `w: fill` (cross) | `align-self: stretch` |
+| `w`, `h` de la racine | `width` / `height` : `100%` (fill), `fit-content` (hug), `n px` (fixed), toujours émis |
 | `minW`, `maxW`, ... | `min-width`, `max-width`, ... |
-| `mainAlign` | `justify-content: flex-start / center / flex-end / space-between` |
-| `crossAlign` | `align-items: flex-start / center / flex-end / stretch` |
+| `gap: $t` | `gap: var(--t)` |
+| `pad: ...` | `padding: ...`, une, deux ou quatre valeurs |
+| `mainAlign` | `justify-content: center / flex-end / space-between`, omis pour `start` |
+| `crossAlign` | `align-items: flex-start / center / flex-end / stretch`, toujours émis (le défaut CSS est `stretch`) |
 | `overflow: clip` | `overflow: hidden` |
 | `overflow: scroll` | `overflow-y: auto` (v) / `overflow-x: auto` (h) |
-| `bg`, `radius`, `border`, `shadow`, `opacity` | propriétés homonymes, valeurs via variables CSS |
-| `Text.style: $type.x` | classe utilitaire générée depuis le token composite (font, size, line-height, weight, letter-spacing) |
-| `Text.maxLines: n` | `display: -webkit-box; -webkit-line-clamp: n; -webkit-box-orient: vertical; overflow: hidden` |
-| `Image.fit` | `object-fit: cover / contain` |
+| `bg`, `radius`, `border`, `shadow`, `opacity` | `background`, `border-radius`, `border: w solid color`, `box-shadow`, `opacity`, valeurs via variables CSS |
+| `Text.style: $type.x` | `composes: type-x from global` (classe utilitaire de `tokens.css`) |
+| `Text.color` | `color` |
+| `Text.align` | `text-align: center / end`, omis pour `start` |
+| `Text.maxLines: n` (`truncate: end`) | `display: -webkit-box; -webkit-line-clamp: n; -webkit-box-orient: vertical; overflow: hidden` |
+| `Text.maxLines: n, truncate: none` | `overflow: hidden; max-height: calc(n * Lem)`, L étant le `lineHeight` du token |
+| `Image.fit: contain` | `object-fit: contain`, omis pour `cover` |
 | `Image.ratio: (w, h)` | `aspect-ratio: w / h` |
-| `role: heading(n)` | balise `<hn>` |
+| `Icon` | `<Icon name="nom web" />` (ADR-005) ; `width` et `height: var(--size-x)`, `color: var(--color-x)`, `flex-shrink: 0` |
+| élément d'un `Text` | `<hn>` si `role: heading(n)`, `<span>` sous un parent `role: button`, `<p>` sinon |
+| élément d'un `Stack` ou d'une `Box` | `<div>` ; d'une `Image` : `<img>` |
 | `role: button` | `role="button"` (ou `<button>` quand la couche composants existera) |
 | `role: textfield` | `role="textbox"` |
+| `role: list`, `listitem`, `image` | `role="list"`, `role="listitem"`, `role="img"` |
 | `role: decorative` | `aria-hidden="true"` |
-| `label` | `aria-label` |
-| `@expanded(...)` | `@media (min-width: 600px) { ... }` |
+| `label` | `aria-label` ; sur une `Image`, `alt` (`alt=""` sans label) |
+| contenu littéral | texte JSX, ou `{"…"}` s'il contient `{`, `}`, `<`, `>`, `&`, un retour à la ligne ou un espace en bord |
+| `slot(nom)` | `{nom}` sur un `Text` ; `src={nom.src} alt={nom.alt ?? ""}` sur une `Image` ; paramètre du composant |
+| `@expanded(...)` | `@media (min-width: 600px) { .id { ... } }` après la règle du nœud : les déclarations qui changent au breakpoint, et `revert` pour celles qui disparaissent |
 
 Le seuil 600 est lu dans le design system (`$bp.expanded`), jamais codé en dur dans le compilateur.
 
@@ -731,7 +785,7 @@ Chaque question est tranchée par un ADR avant la tâche qu'elle bloque, ou not�
 1. **Nom du langage et extension.** `.ir` est un nom de travail. Tranché sans ADR : `.ir` jusqu'au papier.
 2. **Syntaxe humaine ou JSON seul.** Tranché par l'ADR-006 : les deux, la syntaxe humaine étant canonique et le JSON dérivé.
 3. **Dimensions littérales.** Tranché par l'ADR-004 : littéraux ou `$size.*` pour `fixed`, `min`, `max` ; tokens obligatoires pour `gap`, `pad` et le style.
-4. **Cible web.** React + CSS Modules en v0. Alternative : HTML + CSS pur (plus universel, décompilation plus simple, pas de slots typés). Défaut : React, parce que les slots typés sont l'endroit où la frontière design/code devient vérifiable par le compilateur TypeScript. **Ouverte, à trancher avant T7.**
+4. **Cible web.** Tranché par l'ADR-009 : React + CSS Modules, parce que les slots typés sont l'endroit où la frontière design/code devient vérifiable par le compilateur TypeScript.
 5. **Icônes.** Tranché par l'ADR-005 : jeu déclaré dans le design system, un nom par backend, E002 si absent.
 6. **Scroll et `fill`.** Un enfant `fill` sur l'axe de scroll d'un Stack `scroll` reçoit une contrainte infinie (E007). Alternative : l'interpréter comme `hug`. Défaut : E007, parce que l'erreur révèle presque toujours une intention floue du design. **Ouverte, à trancher avant T6.**
 7. **Troisième breakpoint.** Tranché par l'ADR-003 : deux breakpoints en v0, l'extension est notée là.

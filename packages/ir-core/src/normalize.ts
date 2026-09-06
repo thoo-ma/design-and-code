@@ -174,8 +174,10 @@ function effective(
 /** Résolution d'une propriété : valeur effective, sinon défaut (§4). */
 function resolve(eff: Props, key: string): unknown {
   const v = eff[key];
+  // truncate n'a d'effet qu'avec maxLines (§4.4) : sans lui, il se résout à none.
+  if (key === "truncate")
+    return eff["maxLines"] === undefined ? "none" : (v ?? "end");
   if (v !== undefined) return v;
-  if (key === "truncate") return eff["maxLines"] === undefined ? "none" : "end";
   return DEFAULTS[key];
 }
 

@@ -22,6 +22,8 @@ export function typecheck(
   positions?: ReadonlyMap<string, Position>,
 ): readonly IRError[] {
   const errors: IRError[] = [];
+  /** Slots déjà vus : nom → type de nœud (§9.3, un slot est un paramètre). */
+  const slots = new Map<string, Node["type"]>();
   const visit = (
     node: Node,
     indices: readonly number[],
@@ -31,7 +33,10 @@ export function typecheck(
       node.id ?? `${node.type}[${String(indices[indices.length - 1] ?? 0)}]`;
     const path = parentPath === "" ? segment : `${parentPath}/${segment}`;
     const pos = positions?.get(indexPath(indices));
-    const report = (code: "E002" | "E006" | "E007", message: string): void => {
+    const report = (
+      code: "E002" | "E004" | "E006" | "E007",
+      message: string,
+    ): void => {
       errors.push(irError(code, path, message, pos));
     };
 
@@ -68,6 +73,20 @@ export function typecheck(
         );
       }
     };
+
+    if (
+      (node.type === "Text" || node.type === "Image") &&
+      node.content.kind === "slot"
+    ) {
+      const seen = slots.get(node.content.name);
+      if (seen === undefined) slots.set(node.content.name, node.type);
+      else if (seen !== node.type) {
+        report(
+          "E004",
+          `slot(${node.content.name}) est déjà un slot de ${seen} : un slot est un paramètre, ses usages doivent avoir le même type (§9.3). Le renommer.`,
+        );
+      }
+    }
 
     collectTokens(node.props, checkToken);
     for (const o of node.overrides) {
