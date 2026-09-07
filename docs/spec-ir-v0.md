@@ -21,6 +21,8 @@ Réservé (syntaxe stabilisée, sémantique à venir) :
 - Les composants nommés et leurs signatures (props, slots, variants, états).
 - Les états visuels sur les feuilles.
 
+Direction notée, non tranchée : la modalité des transitions entre états — durée, easing, propriété animée — pourrait à terme rejoindre le fragment design-relevant, comme l'animation dont elle est un cas particulier (ADR-002), le déclencheur restant code. Symétrique de la topologie des écrans, elle aussi non tranchée.
+
 Hors scope v0 (ADR-003) :
 - Layout absolu, rotation, wrap, grid, poids sur fill, animation de layout.
 - Modes de thème dans l'IR : le clair/sombre est une affaire de tokens (modes DTCG), l'IR ne le voit jamais.
@@ -844,6 +846,7 @@ Les lois en ont ouvert deux autres, qui ne figuraient pas dans cette liste et so
 - **Backend** : compilateur de l'IR vers une cible (CSS, SwiftUI, plus tard Compose).
 - **Breakpoint** : classe de largeur de viewport nommée par le design system.
 - **Décompilation** : lecture de la zone générée d'un code pour retrouver l'IR.
+- **État** : configuration visuelle complète et nommée d'un écran ou d'un composant — `default`, `hover`, `pressed`, `focus`, `disabled`, `error`, `loading`, `empty` — décrite sans référence au temps, aux données ni aux événements. L'IR déclare l'existence et le rendu de chaque état, jamais sa condition d'entrée (ADR-002) ; la transition entre états est aujourd'hui code, son passage au design étant une direction notée (§0). Voir aussi *Variant*.
 - **Forme normale** : représentation canonique d'un IR, unique, utilisée pour toute comparaison.
 - **Fragment design-relevant** : ce que l'IR gouverne, défini dans ADR-002.
 - **Hug / fill / fixed** : les trois modes de dimension par axe.
@@ -851,4 +854,5 @@ Les lois en ont ouvert deux autres, qui ne figuraient pas dans cette liste et so
 - **Placeholder** : contenu d'exemple fourni par le design, compilé vers les previews.
 - **Slot** : contenu fourni par le code, exposé comme paramètre de la zone générée.
 - **Token** : valeur nommée du design system, référencée par `$groupe.nom`.
+- **Variant** : choix nommé de structure ou de paramètres d'un composant, décidé statiquement (ex. `Field(variant: outlined)`, §10) ; il obéit à la même loi que l'état — existence et rendu dans l'IR, condition dans le code. Voir aussi *État*.
 - **Zone générée / préservée** : les deux parties du code produit, l'une réécrite à chaque compilation, l'autre jamais.
