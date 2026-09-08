@@ -85,6 +85,16 @@ function reducePad(v: unknown): unknown {
   return v;
 }
 
+/** Règle 8 (spec §6) : `mainAlign` sans effet (axe principal hug, sans min). */
+function mainAlignNoop(node: Node, bp: string): boolean {
+  if (node.type !== "Stack") return false;
+  const eff = resolved(node, bp);
+  const axis: "w" | "h" = eff["dir"] === "h" ? "w" : "h";
+  const size = eff[axis] as { kind?: string } | undefined;
+  if (size === undefined || size.kind !== "hug") return false;
+  return eff[axis === "w" ? "minW" : "minH"] === undefined;
+}
+
 function breakpoints(screen: Screen): readonly string[] {
   const out = new Set<string>([""]);
   const walk = (n: Node): void => {
@@ -148,8 +158,19 @@ describe("N préserve ce qu'elle doit préserver (spec §6)", () => {
                 (key === "w" || key === "h") &&
                 JSON.stringify(ra[key]) === JSON.stringify({ kind: "fill" }) &&
                 JSON.stringify(rb[key]) === JSON.stringify({ kind: "hug" });
+              // La règle 8 s'applique après la règle 1 : la taille principale
+              // lue est celle du nœud déjà normalisé (b), pas celle de l'entrée.
+              const rule8 =
+                key === "mainAlign" &&
+                JSON.stringify(ra[key]) !== JSON.stringify("start") &&
+                JSON.stringify(rb[key]) === JSON.stringify("start") &&
+                (mainAlignNoop(b, bp) ||
+                  (b.type === "Stack" && b.children.length === 0) ||
+                  (ra[key] === "between" &&
+                    b.type === "Stack" &&
+                    b.children.length < 2));
               expect(
-                same || rule1,
+                same || rule1 || rule8,
                 `${key} @${bp || "compact"} : ${JSON.stringify(ra[key])} → ${JSON.stringify(rb[key])}`,
               ).toBe(true);
             }

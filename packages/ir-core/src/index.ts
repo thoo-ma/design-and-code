@@ -2,6 +2,7 @@
 // normale (T3), design system et typecheck (T4), résolution des breakpoints (T6),
 // vue générique des propriétés pour les backends (T8).
 export * from "./ast.js";
+export * from "./dtcg.js";
 export * from "./errors.js";
 export * from "./schema.js";
 export * from "./lexer.js";
