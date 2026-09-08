@@ -37,6 +37,7 @@ const BASE = "";
 export function normalize(screen: Screen): Normalized {
   const warnings: IRError[] = [];
   let root = rule1(screen.root, undefined, undefined, [], "", warnings);
+  root = mapTree(root, (node) => rule1bis(node));
   root = mapTree(root, (node) => rule2(node));
   root = mapTree(root, (node, path) => rule3(node, path, warnings));
   root = mapTree(root, (node, path) => rule4(node, path, warnings));
@@ -247,6 +248,20 @@ function stretched(
   );
 }
 
+/**
+ * Le parent étire-t-il ses enfants sur `axis` (crossAlign: stretch, axe
+ * secondaire) ? Sous un tel parent, `fill` ≡ `hug` : la règle 1 les confond.
+ */
+function stretchesChild(
+  parent: StackNode,
+  axis: "w" | "h",
+  bp: string,
+): boolean {
+  const p = effective(propsOf(parent.props), overridesOf(parent), bp);
+  const cross = p["dir"] === "h" ? "h" : "w";
+  return axis === cross && resolve(p, "crossAlign") === "stretch";
+}
+
 function fillInHug(
   node: Node,
   parent: StackNode,
@@ -268,11 +283,13 @@ function fillInHug(
     for (const bp of bps) {
       const child = sizeAt(node, axis, bp);
       const parentSize = sizeAt(parent, axis, bp);
-      if (
+      const inHug =
         child.kind === "fill" &&
         parentSize.kind === "hug" &&
-        !stretched(parent, grand, axis, bp)
-      ) {
+        !stretched(parent, grand, axis, bp);
+      const underStretch =
+        child.kind === "fill" && stretchesChild(parent, axis, bp);
+      if (inHug || underStretch) {
         values.set(bp, { kind: "hug" });
         changedAt.push(bp);
       } else {
@@ -311,11 +328,79 @@ function fillInHug(
       irError(
         "W001",
         path,
-        `${axis}: fill dans un parent hug (${where}), normalisé en hug. Mettre le parent en fill ou fixed si l'enfant doit remplir.`,
+        `${axis}: fill sans effet (parent hug ou crossAlign stretch, ${where}), normalisé en hug. Mettre le parent en fill ou fixed si l'enfant doit remplir.`,
       ),
     );
   }
   return withProps(node, props, overrides);
+}
+
+// ---------------------------------------------------------------------------
+// Règle 1 bis — mainAlign sans espace libre (no-op, spec §4.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * `mainAlign` n'a d'effet que si le Stack a de l'espace libre sur son axe
+ * principal : il n'est ni `hug` (sauf contrainte `min` supérieure au contenu,
+ * indécidable ici, donc conservée), ni `between` avec moins de deux enfants
+ * (§4.2). Dans ces cas, il se résout à `start` — un no-op, effacé sans
+ * avertissement, comme la règle 2. Appliquée après la règle 1.
+ */
+function rule1bis(node: Node): Node {
+  if (node.type !== "Stack") return node;
+  const stack = node;
+  const props = propsOf(stack.props);
+  const overrides = overridesOf(stack);
+  const bps = breakpointsOf(overrides);
+
+  const hasEffect = (bp: string): boolean => {
+    const eff = effective(props, overrides, bp);
+    const axis: "w" | "h" = eff["dir"] === "h" ? "w" : "h";
+    const size = sizeAt(stack, axis, bp);
+    if (size.kind !== "hug") return true;
+    const min = eff[axis === "w" ? "minW" : "minH"];
+    return min !== undefined;
+  };
+
+  const values = new Map<string, string>();
+  let changed = false;
+  for (const bp of bps) {
+    const eff = effective(props, overrides, bp);
+    const current = resolve(eff, "mainAlign") as string;
+    const noop =
+      stack.children.length === 0 ||
+      !hasEffect(bp) ||
+      (current === "between" && stack.children.length < 2);
+    values.set(bp, noop ? "start" : current);
+    if (noop && current !== "start") changed = true;
+  }
+  if (!changed) return stack;
+
+  const base = values.get(BASE) ?? "start";
+  const nextProps =
+    base === "start"
+      ? without(props, "mainAlign")
+      : { ...props, mainAlign: base };
+  const nextOverrides = bps
+    .filter((bp) => bp !== BASE)
+    .map((bp) => {
+      const existing = overrides.find((o) => o.breakpoint === bp) ?? {
+        breakpoint: bp,
+        props: {},
+      };
+      const value = values.get(bp) ?? base;
+      const next =
+        value === base
+          ? without(existing.props, "mainAlign")
+          : { ...existing.props, mainAlign: value };
+      return { breakpoint: bp, props: next };
+    })
+    .filter(
+      (o) =>
+        Object.keys(o.props).length > 0 ||
+        overrides.some((x) => x.breakpoint === o.breakpoint),
+    );
+  return withProps(stack, nextProps, nextOverrides);
 }
 
 // ---------------------------------------------------------------------------

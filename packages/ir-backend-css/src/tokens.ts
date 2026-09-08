@@ -6,23 +6,17 @@
  * Golden : `fixtures/design-system/expected/tokens.css`, à l'octet près.
  */
 
-import { dimensionPx, fail, irError, ok } from "ir-core";
+import { dimensionPx, fail, irError, isObject, ok, rgb255 } from "ir-core";
 import type {
   DesignSystem,
   IRError,
   Result,
   ThemedDesignSystem,
+  TokenCompilerOptions,
   TokenEntry,
 } from "ir-core";
 
-export interface TokenCompilerOptions {
-  /** Noms des fichiers sources, pour l'en-tête. */
-  readonly sources: readonly string[];
-}
-
-type Json = Readonly<Record<string, unknown>>;
-const isObject = (v: unknown): v is Json =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
+export type { TokenCompilerOptions };
 
 /** Variable CSS : `$groupe.sous.nom` → `--groupe-sous-nom`. */
 export const cssVariable = (entry: TokenEntry): string =>
@@ -235,15 +229,6 @@ export function cssColor(value: unknown): string | undefined {
   return rgb === undefined
     ? undefined
     : `#${rgb.map((c) => c.toString(16).padStart(2, "0").toUpperCase()).join("")}`;
-}
-
-function rgb255(value: Json): readonly [number, number, number] | undefined {
-  const c = value["components"];
-  if (!Array.isArray(c) || c.length < 3) return undefined;
-  const [r, g, b] = c;
-  if (typeof r !== "number" || typeof g !== "number" || typeof b !== "number")
-    return undefined;
-  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
 }
 
 function cssShadow(value: unknown): string | undefined {

@@ -178,17 +178,22 @@ describe("table §11.1 : Stack, style, Text, Image, Icon", () => {
   it("align-items toujours émis, justify-content omis pour start, overflow", () => {
     const css = compile(
       screen(
-        stack("root", {
-          dir: "h",
-          overflow: "scroll",
-          mainAlign: "between",
-          crossAlign: "center",
-          pad: [
-            { group: "space", path: ["xs"] },
-            { group: "space", path: ["sm"] },
-          ],
-          gap: { group: "space", path: ["md"] },
-        }),
+        stack(
+          "root",
+          {
+            dir: "h",
+            w: { kind: "fill" },
+            overflow: "scroll",
+            mainAlign: "between",
+            crossAlign: "center",
+            pad: [
+              { group: "space", path: ["xs"] },
+              { group: "space", path: ["sm"] },
+            ],
+            gap: { group: "space", path: ["md"] },
+          },
+          [box("a", {}), box("b", {})],
+        ),
       ),
     ).css;
     expect(cssRule(css, "root")).toContain(

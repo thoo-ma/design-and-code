@@ -51,10 +51,10 @@ Spec v0.1 écrite et précisée au fil des tâches. Une ligne par tâche de `TAS
 | T8 | décompilateur | `ir-backend-css` | L2, L4 (commutation) | fait |
 | T9 | géométrie CSS par Playwright (ADR-010, ADR-011) | `ir-backend-css` | L3 (moitié backend) | fait |
 | T10 | importeur DOM | `ir-import-dom` | — | en cours |
-| T11 | backend SwiftUI | `ir-backend-swiftui` | L2, L3 | à faire |
+| T11 | backend SwiftUI | `ir-backend-swiftui` | L2, L3 | fait |
 | T12 | importeur Figma | `ir-import-figma` | L1 | à faire |
 
-Les lois sont énoncées à la spec §7 ; leurs tests de propriété sont dans le `test/laws.test.ts` de `ir-core`, `ir-layout-ref` et `ir-backend-css`, et la loi 3 dans `packages/ir-backend-css/test/geometry/law3.test.ts`, qui demande un navigateur.
+Les lois sont énoncées à la spec §7 ; leurs tests de propriété sont dans le `test/laws.test.ts` de `ir-core`, `ir-layout-ref`, `ir-backend-css` et `ir-backend-swiftui`, et la loi 3 dans `packages/ir-backend-css/test/geometry/law3.test.ts`, qui demande un navigateur.
 
 ## Développement
 

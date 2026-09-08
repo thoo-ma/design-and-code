@@ -347,7 +347,8 @@ Toute comparaison d'IR (dans les lois, dans les tests, dans les diffs) se fait s
 
 Règles, appliquées dans cet ordre :
 
-1. **Élimination de fill-in-hug.** Un enfant `fill` sur un axe où son parent Stack est `hug` sur le même axe devient `hug`, sauf si ce parent est lui-même étiré sur cet axe par son propre parent (`crossAlign: stretch` du grand-parent, l'axe étant l'axe secondaire du grand-parent) : un Stack étiré dispose de l'espace et ses enfants `fill` le remplissent, c'est le cas de `#primary` dans `#actions` en §10. La règle s'évalue breakpoint par breakpoint sur les propriétés résolues (base plus surcharge), et le résultat est réencodé en base plus surcharges. Chaque changement produit un avertissement W001. (Figma applique la même règle silencieusement.)
+1. **Élimination de fill sans effet.** Un enfant `fill` sur un axe devient `hug` quand le parent ne lui laisse pas cet espace : soit le parent est `hug` sur le même axe — sauf s'il est lui-même étiré sur cet axe par son propre parent (`crossAlign: stretch` du grand-parent, l'axe étant l'axe secondaire du grand-parent), c'est `#primary` dans `#actions` en §10 —, soit le parent est `crossAlign: stretch` sur cet axe (l'axe secondaire) : sous `stretch`, `fill` ≡ `hug`, l'enfant est étiré de toute façon. La règle s'évalue breakpoint par breakpoint sur les propriétés résolues (base plus surcharge), et le résultat est réencodé en base plus surcharges. Chaque changement produit un avertissement W001. (Figma applique la même règle silencieusement.)
+1 bis. **Élimination de `mainAlign` sans effet.** `mainAlign` n'a d'effet que si le Stack a de l'espace libre sur son axe principal (§4.2) : le `mainAlign` d'un Stack `hug` sur cet axe, sans contrainte `min`, se résout à `start`. `between` avec moins de deux enfants se comporte comme `start` (§4.2). C'est un no-op, effacé sans avertissement, comme la règle 2. Appliquée après la règle 1, dont elle voit les `fill` déjà éliminés.
 2. **Élimination des défauts.** Toute propriété de base égale à sa valeur par défaut est omise. L'égalité est sémantique : `pad: ($space.none, $space.none)` vaut le défaut, et `label: ""` vaut l'absence de label (un nom accessible vide n'en est pas un ; ARIA l'ignore, et le code généré ne distingue pas les deux). Une propriété n'est omise que si sa résolution (défauts de §4 compris, dont celui de `truncate`) est la même à chaque breakpoint avec et sans elle.
 3. **Élimination des surcharges vides.** Une propriété de surcharge dont la résolution au breakpoint est la même avec et sans elle est omise. Un `@bp(...)` devenu vide est supprimé, avec un avertissement W003.
 4. **Résolution de `truncate`.** `truncate` n'a de sens qu'aux breakpoints où `maxLines` est résolu (§4.4), et y vaut `end` par défaut. `N` l'écrit là où il agit : la base porte `truncate: none` si et seulement si `maxLines` y est résolu et que la valeur y est `none` ; une surcharge porte `truncate` si et seulement si `maxLines` y est résolu et que la valeur y diffère de celle que la base lui donne (`end` si la base n'en porte pas). Partout ailleurs `truncate` est omis. Un `truncate: none` écrit à la base sans `maxLines`, pour une surcharge qui ajoute `maxLines`, est donc déplacé dans cette surcharge : deux IR de même sens ont une seule forme normale, ce que la loi 2 exige d'un décompilateur qui ne voit que des valeurs résolues.
@@ -620,48 +621,67 @@ Le littéral "Bienvenue" est compilé en dur parce que c'est un placeholder sur 
 ### 10.3 Sortie SwiftUI (extrait)
 
 ```swift
+// Généré depuis Login.ir par ir-backend-swiftui. Ne pas éditer : zone générée (spec §9).
+import SwiftUI
+
 struct LoginLayout: View {
   let subtitle: String
 
   var body: some View {
-    VStack(alignment: .center, spacing: T.space.md) {
+    VStack(spacing: T.space.md) {
       Spacer(minLength: 0)
       Text("Bienvenue")
         .font(T.type.heading.lg).foregroundStyle(T.color.text.primary)
         .accessibilityAddTraits(.isHeader)
+        .frame(maxWidth: .infinity)
         .irNode("title")
       Text(subtitle)
         .font(T.type.body.md).foregroundStyle(T.color.text.secondary)
         .lineLimit(2)
+        .frame(maxWidth: .infinity)
         .irNode("subtitle")
       VStack(spacing: T.space.sm) {
         RoundedRectangle(cornerRadius: T.radius.md)
           .fill(T.color.bg.field)
           .frame(height: 48)
-          .overlay(RoundedRectangle(cornerRadius: T.radius.md)
-                     .stroke(T.color.border.default, lineWidth: T.size.hairline))
+          .overlay(RoundedRectangle(cornerRadius: T.radius.md).stroke(T.color.border.`default`, lineWidth: T.size.hairline))
           .accessibilityLabel("Email")
+          .frame(maxWidth: .infinity)
           .irNode("email")
-        // password : idem
+        RoundedRectangle(cornerRadius: T.radius.md)
+          .fill(T.color.bg.field)
+          .frame(height: 48)
+          .overlay(RoundedRectangle(cornerRadius: T.radius.md).stroke(T.color.border.`default`, lineWidth: T.size.hairline))
+          .accessibilityLabel("Mot de passe")
+          .frame(maxWidth: .infinity)
+          .irNode("password")
       }
+      .frame(maxWidth: .infinity)
       .irNode("form")
       HStack(alignment: .center, spacing: T.space.sm) {
-        HStack { Text("Continuer").font(T.type.label.md).foregroundStyle(T.color.text.onAccent) }
-          .frame(maxWidth: .infinity)
-          .frame(height: 48)
-          .background(T.color.accent, in: RoundedRectangle(cornerRadius: T.radius.md))
-          .accessibilityAddTraits(.isButton)
-          .irNode("primary")
+        HStack(alignment: .center) {
+          Spacer(minLength: 0)
+          Text("Continuer")
+            .font(T.type.label.md).foregroundStyle(T.color.text.onAccent)
+            .irNode("primaryLabel")
+          Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 48)
+        .background(T.color.accent, in: RoundedRectangle(cornerRadius: T.radius.md))
+        .accessibilityAddTraits(.isButton)
+        .irNode("primary")
         Image(systemName: T.icon.help).font(.system(size: T.size.icon.md))
           .foregroundStyle(T.color.text.secondary)
           .irNode("help")
       }
+      .frame(maxWidth: .infinity)
       .irNode("actions")
       Spacer(minLength: 0)
     }
     .padding(sizeClass == .compact ? T.space.lg : T.space.xl)
-    .frame(maxWidth: sizeClass == .compact ? .infinity : 480)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .frame(maxWidth: sizeClass == .compact ? nil : 480)
     .background(T.color.bg.canvas)
     .irNode("root")
   }
@@ -756,8 +776,9 @@ Sous-ensemble de SwiftUI autorisé dans la zone générée : `VStack`, `HStack`,
 | `Text.maxLines` | `.lineLimit(n)` |
 | `Text.align` | `.multilineTextAlignment` |
 | `Image.fit` | `.aspectRatio(contentMode: .fill / .fit)` |
-| `role: heading` | `.accessibilityAddTraits(.isHeader)` |
+| `role: heading` | `.accessibilityAddTraits(.isHeader)` (le niveau 1-6 n'a pas d'équivalent, perdu) |
 | `role: button` | `.accessibilityAddTraits(.isButton)` |
+| `role: image` | `.accessibilityAddTraits(.isImage)` |
 | `role: decorative` | `.accessibilityHidden(true)` |
 | `@expanded(...)` | `@Environment(\.horizontalSizeClass)` et expressions conditionnelles dans les modificateurs |
 | `@expanded(dir: ...)` | `AnyLayout(sizeClass == .compact ? AnyLayout(VStackLayout(...)) : AnyLayout(HStackLayout(...))) { ... }` : `dir` est surchargeable comme toute propriété de layout (§4.7), et c'est la seule construction qui change de conteneur sans dupliquer les enfants |
@@ -769,6 +790,11 @@ Motifs que la décompilation doit reconnaître (parce que la propriété du pare
 - `AnyLayout(sizeClass == .compact ? … VStackLayout … : … HStackLayout …)` → surcharge `@expanded(dir: …)`.
 
 Approximation assumée (documentée dans le papier) : la size class SwiftUI n'est pas strictement un seuil de largeur. Sur iPhone en portrait elle est toujours `compact` ; sur iPad elle dépend du multitâche. C'est acceptable en v0 parce que le design system ne définit que deux breakpoints. Si un troisième breakpoint apparaît, le backend SwiftUI devra passer à un seuil de largeur explicite via `GeometryReader`.
+
+Limites v0 (perte documentée, pas d'approximation silencieuse) :
+- `role: textfield`, `role: list`, `role: listitem` n'ont pas de trait SwiftUI : le compilateur ne les émet pas. Ils redeviendront de vrais composants (`TextField`, `List`) quand la couche composants arrivera (§10.1). La loi 2 ne porte que sur le fragment représentable (ADR-002).
+- `Text.truncate: none` (coupe nette sans ellipse) n'a pas d'équivalent : `.lineLimit` ellipse toujours. Le compilateur encode la distinction par `.truncationMode`, approximation à réviser avec la couche composants.
+- Les surcharges qui exigeraient un élément structurel conditionnel ne sont pas représentables : `overflow` (ScrollView/`.clipped()`), `mainAlign` (motif de Spacers), `crossAlign` entre `stretch` et un alignement explicite, et `overflow: scroll` combiné à `dir`. Ces combinaisons sont rejetées par le test de loi 2, qui cite cette liste.
 
 ### 11.3 Figma auto-layout → IR
 
